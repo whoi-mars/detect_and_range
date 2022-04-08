@@ -95,7 +95,7 @@ class DataHandler():
         # Generate one spectrogram to get the dimensions for the current settings
         [_,_,Zxx] = stft(x=self.p_t_noise[:,0], fs=fs, nperseg=nperseg, noverlap=noverlap, nfft=nfft)
 
-        self.X = np.zeros((self.n_examples, Zxx.shape[0], Zxx.shape[1], 1), dtype='float32')
+        self.X = np.zeros((self.n_examples, 1, Zxx.shape[0], Zxx.shape[1]), dtype='float32')
         self.y = self.labels
 
         for sig in tqdm(range(self.n_examples), disable=not verbose):
@@ -110,9 +110,12 @@ class DataHandler():
             log_spec = np.flipud(10*np.log10(np.abs(Zxx)**2))
 
             # Add channel dimension
-            log_spec = log_spec[:,:,np.newaxis]
+            log_spec = log_spec[np.newaxis, :,:]
 
-            self.X[sig,:,:] = log_spec
+            self.X[sig,:,:,:] = log_spec
+
+        # Normalize between 0 and 1
+        self.X = (self.X - self.X.min(axis=(2,3), keepdims=True)) / (self.X.max(axis=(2,3), keepdims=True) - self.X.min(axis=(2,3), keepdims=True))
 
         # Make first dimension the number of examples
         self.y = self.y.T.astype('float32')
