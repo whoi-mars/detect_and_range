@@ -13,6 +13,8 @@ def plot_grid(images_arr, labels_arr, label_text, title, dim=(3, 3), randomize=T
     ----------
     images_arr: 2D array-like, array of images
     labels_arr: array-like, array of labels which correspond in order to the images
+    label_text: text for labels above each image
+    title: title for whole subplot
     dim: tuple, dimensions of the plot in terms of number of images
     randomize: bool, whether or not to take a random subset of the images of size dim[0]*dim[1]. In
                this case, there must be at least dim[0] * dim[1] many images.
