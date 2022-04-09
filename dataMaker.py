@@ -2,7 +2,7 @@ from scipy.io import loadmat
 from scipy.signal import stft
 from sklearn.model_selection import train_test_split
 import numpy as np
-from tqdm import tqdm_notebook as tqdm
+from tqdm.notebook import tqdm
 import h5py
 import os
 
