@@ -35,7 +35,7 @@ class Gunshot(data.Dataset):
 
         self.dir_path = dir_path
         self.transform = transform
-        self.inputs = self._load_h5_file_with_data()
+        self.inputs, self.imsize = self._load_h5_file_with_data()
         # self.targets = {
         #     task: self._load_h5_file_with_data(self.task_to_file[task]) for task in tasks if task in self.task_to_file
         # }
@@ -64,7 +64,7 @@ class Gunshot(data.Dataset):
         # key = list(file.keys())[0]
         # data = file[key]
         # return dict(file=file, data=data)
-        return dict(data=file['data'], labels=file['labels'])
+        return dict(data=file['data'], labels=file['labels']), file['data'].shape[2:]
 
 
 class RandomBatchSampler(data.Sampler):
