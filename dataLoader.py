@@ -29,13 +29,14 @@ class Gunshot(data.Dataset):
     :type dir_path: str
     """
 
-    def __init__(self, dir_path, transform=None):
+    def __init__(self, dir_path, max_range, transform=None):
 
         super(Gunshot, self).__init__()
 
         self.dir_path = dir_path
         self.transform = transform
         self.inputs, self.imsize = self._load_h5_file_with_data()
+        self.max_range = max_range
         # self.targets = {
         #     task: self._load_h5_file_with_data(self.task_to_file[task]) for task in tasks if task in self.task_to_file
         # }
@@ -46,7 +47,8 @@ class Gunshot(data.Dataset):
     def __getitem__(self, index):
 
         inputs = self._from_numpy(self.inputs['data'][index])
-        targets = self._from_numpy(self.inputs['labels'][index])
+        targets = self._from_numpy(np.asarray([self.inputs['labels'][index,0]]))
+        targets[targets != -1] = targets / self.max_range
 
         if self.transform is not None:
             inputs = self.transform(inputs)
