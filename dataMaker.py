@@ -173,7 +173,7 @@ class DataHandler():
             f.create_dataset("data", data=self.X)
             f.create_dataset("labels", data=self.y)
 
-    def save_split_h5(self, train_path, val_path, test_size=None, train_size=None, random_state=None, shuffle=True, stratify=None):
+    def save_split_h5(self, train_path, val_path, test_path=None, val_size=None, test_size=None, train_size=None, random_state=None, shuffle=True, stratify=None):
         
         """
         Save spectrograms and labels in h5 format.
@@ -185,7 +185,17 @@ class DataHandler():
         if self.X is None or self.y is None:
             raise Exception("Spectram data has not yet been created.")
 
-        X_train, X_val, y_train, y_val = train_test_split(self.X, self.y, test_size=test_size, train_size=train_size, random_state=random_state, shuffle=shuffle, stratify=stratify)
+        # Train/val split
+        X_train, X_val, y_train, y_val = train_test_split(self.X, self.y, test_size=val_size, train_size=train_size, random_state=random_state, shuffle=shuffle, stratify=stratify)
+        
+        # Test split from training data
+        if test_size is not None:
+            test_size = test_size / train_size
+            X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=test_size, train_size=train_size, random_state=random_state, shuffle=shuffle, stratify=stratify)
+
+            with h5py.File(test_path, 'w') as f:
+                f.create_dataset("data", data=X_test)
+                f.create_dataset("labels", data=y_test)
 
         with h5py.File(train_path, 'w') as f:
             f.create_dataset("data", data=X_train)
