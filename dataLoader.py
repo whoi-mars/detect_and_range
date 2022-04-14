@@ -37,23 +37,18 @@ class Gunshot(data.Dataset):
         self.transform = transform
         self.inputs, self.imsize = self._load_h5_file_with_data()
         self.max_range = max_range
-        # self.targets = {
-        #     task: self._load_h5_file_with_data(self.task_to_file[task]) for task in tasks if task in self.task_to_file
-        # }
-
-        #self.transform = Compose([self._from_numpy, self._permute_tf_to_torch]+transform)
-        #self.target_transforms = self._prepare_default_target_transforms(target_transforms)
 
     def __getitem__(self, index):
 
-        inputs = self._from_numpy(self.inputs['data'][index])
-        targets = self._from_numpy(np.asarray([self.inputs['labels'][index,0]]))
-        targets[targets != -1] = targets / self.max_range
+        inputs = torch.transpose(self._from_numpy(self.inputs['data'][index]), 1, 2).squeeze()
+        class_targets = self._from_numpy(np.asarray([self.inputs['labels'][index,4]]))
+        range_targets = self._from_numpy(np.asarray([self.inputs['labels'][index,0]]))
+        range_targets[range_targets != -1] = range_targets / self.max_range
 
         if self.transform is not None:
             inputs = self.transform(inputs)
 
-        return inputs, targets
+        return inputs, range_targets, class_targets
 
     def __len__(self):
         return self.inputs['data'].shape[0]
@@ -63,9 +58,6 @@ class Gunshot(data.Dataset):
 
     def _load_h5_file_with_data(self):
         file = h5py.File(self.dir_path)
-        # key = list(file.keys())[0]
-        # data = file[key]
-        # return dict(file=file, data=data)
         return dict(data=file['data'], labels=file['labels']), file['data'].shape[2:]
 
 
