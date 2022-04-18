@@ -3,6 +3,7 @@ from scipy.signal import stft
 from sklearn.model_selection import train_test_split
 import numpy as np
 from tqdm.notebook import tqdm
+from skimage.transform import resize
 import h5py
 import os
 
@@ -89,8 +90,13 @@ class DataHandler():
         y: array-like, labels of shape (n_labels, n_examples).
         """
 
+        # For 3 channel nperseg = 60, noverlap = [59, 40, 20], nfft = 447
+        # For 1 channel nperseg = 60, noverlap = 52, nfft = 750
+
         if fs is None:
             fs = self.fs
+
+        #noverlap_list = [nperseg-1, (2/3)*nperseg, (1/3)*nperseg]
 
         # Generate one spectrogram to get the dimensions for the current settings
         [_,_,Zxx] = stft(x=self.p_t_noise[:,0], fs=fs, nperseg=nperseg, noverlap=noverlap, nfft=nfft)
@@ -106,12 +112,13 @@ class DataHandler():
             elif rand_shift and not self.labels[4,sig]:
                 self.p_t_noise[:,sig] = self.__wrap_signal_random(self.p_t_noise[:,sig])
 
+            #for c in range(len(noverlap_list)):
             [f, t, Zxx] = stft(x=self.p_t_noise[:,sig], fs=fs, nperseg=nperseg, noverlap=noverlap, nfft=nfft)
             log_spec = np.flipud(10*np.log10(np.abs(Zxx)**2))
+            #log_spec = resize(log_spec, (224, 224), anti_aliasing=True)
 
             # Add channel dimension
             log_spec = log_spec[np.newaxis, :,:]
-
             self.X[sig,:,:,:] = log_spec
 
         # Normalize between 0 and 1
