@@ -40,7 +40,7 @@ class Gunshot(data.Dataset):
 
     def __getitem__(self, index):
 
-        inputs = torch.transpose(self._from_numpy(self.inputs['data'][index]), 1, 2).squeeze()
+        inputs = self._from_numpy(self.inputs['data'][index])
         class_targets = self._from_numpy(np.asarray([self.inputs['labels'][index,4]]))
         range_targets = self._from_numpy(np.asarray([self.inputs['labels'][index,0]]))
         range_targets[range_targets != -1] = range_targets / self.max_range
