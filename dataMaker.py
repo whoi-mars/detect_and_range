@@ -69,7 +69,7 @@ class DataHandler():
         self.p_t_noise = (self.p_t_noise - self.p_t_noise.mean(axis=0)) / self.p_t_noise.std(axis=0)
 
 
-    def create_spectrograms(self, fs=None, rand_shift=False, nperseg=31, noverlap=23, nfft=500, verbose=False, channels=1, resize=None):
+    def create_spectrograms(self, fs=None, rand_shift=False, nperseg=31, noverlap=23, nfft=500, verbose=False, channels=1, size=None):
         
         """
         Create spectrograms using dispersive calls from KRAKEN simulation. 
@@ -104,12 +104,12 @@ class DataHandler():
         if channels > len(noverlap_list):
             raise ValueError("Number of channels desired is greater than specified noverlaps in the function's 'noverlap_list' variable.")
 
-        if resize is None:
+        if size is None:
             # Generate one spectrogram to get the dimensions for the current settings
             [_,_,Zxx] = stft(x=self.p_t_noise[:,0], fs=fs, nperseg=nperseg, noverlap=noverlap, nfft=nfft)
             self.X = np.zeros((self.n_examples, channels, Zxx.shape[0], Zxx.shape[1]), dtype='float32')
         else:
-            self.X = np.zeros((self.n_examples, channels, resize[0], resize[1]), dtype='float32')
+            self.X = np.zeros((self.n_examples, channels, size[0], size[1]), dtype='float32')
         self.y = self.labels
 
         for sig in tqdm(range(self.n_examples), disable=not verbose):
@@ -123,8 +123,8 @@ class DataHandler():
             if channels == 1:
                 [f, t, Zxx] = stft(x=self.p_t_noise[:,sig], fs=fs, nperseg=nperseg, noverlap=noverlap, nfft=nfft)
                 log_spec = np.flipud(10*np.log10(np.abs(Zxx)**2))
-                if resize is not None:
-                    log_spec = resize(log_spec, resize, anti_aliasing=True)
+                if size is not None:
+                    log_spec = resize(log_spec, size, anti_aliasing=True)
                 
                 # Add channel dimension
                 log_spec = log_spec[np.newaxis, :,:]
@@ -134,8 +134,8 @@ class DataHandler():
                 for c in range(channels):
                     [f, t, Zxx] = stft(x=self.p_t_noise[:,sig], fs=fs, nperseg=nperseg, noverlap=noverlap_list[c], nfft=nfft)
                     log_spec = np.flipud(10*np.log10(np.abs(Zxx)**2))
-                    if resize is not None:
-                        log_spec = resize(log_spec, resize, anti_aliasing=True)
+                    if size is not None:
+                        log_spec = resize(log_spec, size, anti_aliasing=True)
                     
                     # Add channel dimension
                     log_spec = log_spec[np.newaxis, :,:]
