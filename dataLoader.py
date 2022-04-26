@@ -60,6 +60,42 @@ class Gunshot(data.Dataset):
         file = h5py.File(self.dir_path)
         return dict(data=file['data'], labels=file['labels']), file['data'].shape[2:]
 
+class Warped(data.Dataset):
+    """Dataset to load data from the Oxford pet dataset .h5 files
+    :param dir_path: path to directory containing data (e.g. train, test or val)
+    :type dir_path: str
+    """
+
+    def __init__(self, dir_path, max_range, transform=None):
+
+        super(Warped, self).__init__()
+
+        self.dir_path = dir_path
+        self.transform = transform
+        self.inputs, self.imsize = self._load_h5_file_with_data()
+        self.max_range = max_range
+
+    def __getitem__(self, index):
+
+        inputs = self._from_numpy(self.inputs['data'][index])
+        class_targets = 1.
+        range_targets = self._from_numpy(np.asarray(self.inputs['labels'][index]))
+        range_targets = range_targets / self.max_range
+
+        if self.transform is not None:
+            inputs = self.transform(inputs)
+
+        return inputs, range_targets, class_targets
+
+    def __len__(self):
+        return self.inputs['data'].shape[0]
+
+    def _from_numpy(self, tensor):
+        return torch.from_numpy(tensor).float()
+
+    def _load_h5_file_with_data(self):
+        file = h5py.File(self.dir_path)
+        return dict(data=file['data'], labels=file['labels']), file['data'].shape[2:]
 
 class RandomBatchSampler(data.Sampler):
     """Sampling class to create random sequential batches from a given dataset
