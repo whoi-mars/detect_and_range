@@ -1,5 +1,5 @@
-from scipy.io import loadmat
-from scipy.signal import stft
+from scipy.io import loadmat, savemat, wavfile
+from scipy.signal import stft, decimate
 from sklearn.model_selection import train_test_split
 import numpy as np
 from tqdm.notebook import tqdm
@@ -22,7 +22,7 @@ class DataHandler():
     T: float, duration of KRAKEN simulation for an example.
     """
 
-    def __init__(self, path, noise_only_path=None):
+    def __init__(self, path, noise_only_path=None, data_dir=None, mode='mat', fs_desired=None):
 
         """
         Initialize attributes relevant to KRAKEN simulation.
@@ -31,11 +31,49 @@ class DataHandler():
         path: str, path to .mat file containing relevant data from the KRAKEN simulations
         """
         
+        if mode != 'wav' and mode != 'mat':
+            raise ValueError("mode must be set to either 'wav' or 'mat'.")
+
+        if mode == 'wav' and data_dir is None:
+            raise Exception("You must provide a data directory when in 'wav' mode.")
+
+        self.mode = mode
+        self.fs_desired = fs_desired
+
         self.__path = path
+        self.__data_dir = data_dir
         self.__noise_only_path = noise_only_path
 
-        # Load KRAKEN data
+        # Load data
+        if mode == 'wav':
+            self.__wav_2_mat()
         self.__load_mat()
+
+    def __wav_2_mat(self):
+        
+        files = os.listdir(self.__path)
+        num_files = len(files)
+        calls = None
+
+        for idx, f in enumerate(files):
+            fs, s = self.__load_wav(os.path.join(self.__path, f))
+
+            if self.fs_desired is not None:
+                dec_factor = round(fs / self.fs_desired)
+                s =  decimate(s, dec_factor)
+                fs = fs / dec_factor
+
+            if calls is None:
+                calls = np.zeros((len(s), num_files))
+                labels = np.zeros((1, num_files))
+                T = len(s) / fs       
+
+            calls[:,idx] = s
+            labels[:, idx] = float(f.split('-')[1].split('.')[0].replace('_','.'))*1000
+
+        mdic = {"p_t_r_noise" : calls, "labels" : labels, "T" : T, "fs" : fs}
+        self.__path = os.path.join(self.__data_dir, 'wav_calls.mat')
+        savemat(self.__path, mdic)
 
     def __load_mat(self):
 
@@ -48,8 +86,11 @@ class DataHandler():
 
         # Extract individual vectors
         self.p_t_noise = mat_calls['p_t_r_noise']
-        self.t_dec_min = np.squeeze(mat_calls['t_dec_min'])
-        self.t_dec_max = np.squeeze(mat_calls['t_dec_max'])
+
+        if self.mode == 'mat':
+            self.t_dec_min = np.squeeze(mat_calls['t_dec_min'])
+            self.t_dec_max = np.squeeze(mat_calls['t_dec_max'])
+        
         self.labels = np.squeeze(mat_calls['labels']).astype('float32')
         self.fs = float(np.squeeze(mat_calls['fs']))
         self.T = float(np.squeeze(mat_calls['T']))
@@ -60,14 +101,32 @@ class DataHandler():
             self.p_t_noise = np.concatenate((self.p_t_noise, mat_noise['p_t_noise_only']), axis=1)
             self.labels = np.concatenate((self.labels, np.squeeze(mat_noise['labels_noise_only']).astype('float64')), axis=1)
 
-
         # Number of examples and labels
-        self.n_examples = self.labels.shape[1]
+        try:
+            self.n_examples = self.labels.shape[1]
+        except:
+            self.n_examples = len(self.labels)
         self.n_samples_per_example = self.labels.shape[0]
+
+    def __load_wav(self, path):
+
+        """
+        Load a wav file.
+        Parameters
+        ----------
+        path: str, path to wav file.
+        Return
+        ------
+        fs: int, sample rate.
+        s: array (int), signal
+        """
+
+        fs, s = wavfile.read(path)
+
+        return fs, s
 
     def normalize_wav(self):
         self.p_t_noise = (self.p_t_noise - self.p_t_noise.mean(axis=0)) / self.p_t_noise.std(axis=0)
-
 
     def create_spectrograms(self, fs=None, rand_shift=False, nperseg=31, noverlap=23, nfft=500, verbose=False, channels=1, size=None):
         
@@ -98,6 +157,9 @@ class DataHandler():
 
         if fs is None:
             fs = self.fs
+
+        if self.mode == 'wav' and rand_shift == True:
+            raise ValueError("Randome shift not supported for exerimental data.")
 
         noverlap_list = [nperseg-1, (2/3)*nperseg, (1/3)*nperseg]
 
@@ -185,7 +247,6 @@ class DataHandler():
         shifted_sig = np.roll(x, rand_shift, 0)
 
         return shifted_sig
-
 
     def save_h5(self, path):
 
