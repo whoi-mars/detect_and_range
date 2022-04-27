@@ -161,9 +161,10 @@ class DataHandler():
         if self.mode == 'wav' and rand_shift == True:
             raise ValueError("Randome shift not supported for exerimental data.")
 
-        noverlap_list = [nperseg-1, (2/3)*nperseg, (1/3)*nperseg]
+        nperseg_list = [nperseg, (3/4)*nperseg, (1/2)*nperseg]
+        #noverlap_list = [nperseg-1, (2/3)*nperseg, (1/3)*nperseg]
 
-        if channels > len(noverlap_list):
+        if channels > len(nperseg_list):
             raise ValueError("Number of channels desired is greater than specified noverlaps in the function's 'noverlap_list' variable.")
 
         if size is None:
@@ -194,7 +195,7 @@ class DataHandler():
 
             elif channels > 1:
                 for c in range(channels):
-                    [f, t, Zxx] = stft(x=self.p_t_noise[:,sig], fs=fs, nperseg=nperseg, noverlap=noverlap_list[c], nfft=nfft)
+                    [f, t, Zxx] = stft(x=self.p_t_noise[:,sig], fs=fs, nperseg=nperseg_list[c], noverlap=nperseg_list[c]-1, nfft=nfft)
                     log_spec = np.flipud(10*np.log10(np.abs(Zxx)**2))
                     if size is not None:
                         log_spec = resize(log_spec, size, anti_aliasing=True)
