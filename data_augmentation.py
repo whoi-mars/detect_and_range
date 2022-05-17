@@ -1,7 +1,6 @@
 import torch
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
-from dataLoader import load_h5
 import numpy as np
 
 
@@ -22,8 +21,6 @@ def freq_band_zeroing(x, max_freq_width = 30):
 
     return x
         
-
-
 class FrequencyBandZeroing:
     def  __init__(self, max_freq_width = 30):
         self.max_freq_width = max_freq_width
@@ -33,6 +30,7 @@ class FrequencyBandZeroing:
 
 
 if __name__ == "__main__":
+    from dataLoader import load_h5
     X, y = load_h5("./data/grid_data_atten_big_test.h5")
     idx = np.random.randint(X.shape[0])
     x = torch.from_numpy(X[idx])
