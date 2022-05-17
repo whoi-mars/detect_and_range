@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 
-def plot_grid(images_arr, labels_arr, label_text, title, dim=(3, 3), randomize=True):
+def plot_grid(images_arr, labels_arr, label_text, title, dim=(3, 3), randomize=True, sub_titles=True):
     
     """
     Plots an array of images and their corresponding labels.
@@ -33,7 +33,8 @@ def plot_grid(images_arr, labels_arr, label_text, title, dim=(3, 3), randomize=T
         plt.title(title)
         plt.imshow(np.squeeze(images_arr[0]), aspect='auto')
         plt.axis('off')
-        plt.title("{}: {}".format(label_text, round(labels_arr[0],2)))
+        if sub_titles:
+            plt.title("{}: {}".format(label_text, round(labels_arr[0],2)))
         plt.show()
         return
 
@@ -44,7 +45,8 @@ def plot_grid(images_arr, labels_arr, label_text, title, dim=(3, 3), randomize=T
     for img, ax in zip(images_arr, axes):
         ax.imshow(np.squeeze(img), aspect='auto')
         ax.axis('off')
-        ax.set_title("{}: {}".format(label_text, round(labels_arr[i],2)))
+        if sub_titles:
+            ax.set_title("{} {} m".format(label_text, round(labels_arr[i],2)))
         i += 1
     plt.tight_layout()
     plt.show()
