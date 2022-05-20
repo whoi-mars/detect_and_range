@@ -82,7 +82,7 @@ class DataHandler():
 
         mdic = {u'p_t_r' : calls, u'labels' : labels, u'T' : T, u'fs' : fs}
         self.__path = os.path.join(self.__data_dir, 'wav_calls.mat')
-        hdf5storage.write(mdic, '.', self.__path, matlab_compatible=True)log_spec
+        hdf5storage.write(mdic, '.', self.__path, matlab_compatible=True)
 
     def __load_mat(self):
 
