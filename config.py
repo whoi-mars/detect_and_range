@@ -22,7 +22,7 @@ warped_dir = data_dir + '/new_warped_calls_correct_depths_D70'
 # Location to store WAV files of gunshots detected by the network
 collected_data = data_dir + '/call_collection'
 # Spectrograms and labels of warped experimental data 
-exp_data = data_dir + 'wav_calls.h5'
+exp_data = data_dir + '/wav_calls.h5'
 
 ##################################################################
 #                         Constants                              #
