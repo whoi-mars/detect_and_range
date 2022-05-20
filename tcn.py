@@ -4,6 +4,9 @@ import torch
 import torch.nn as nn
 from torch.nn.utils import weight_norm
 
+##################################################################
+#                       TCN Building Blocks                      #
+##################################################################
 
 class Chomp1d(nn.Module):
     def __init__(self, chomp_size):
@@ -46,7 +49,6 @@ class TemporalBlock(nn.Module):
         res = x if self.downsample is None else self.downsample(x)
         return self.relu(out + res)
 
-
 class TemporalConvNet(nn.Module):
     def __init__(self, num_inputs, num_channels, kernel_size=2, dropout=0.2):
         super(TemporalConvNet, self).__init__()
@@ -64,6 +66,36 @@ class TemporalConvNet(nn.Module):
     def forward(self, x):
         return self.network(x)
 
+class BranchedTemporalConvNet(nn.Module):
+    def __init__(self, num_inputs, num_channels, kernel_size=2, dropout=0.2, branch=2):
+        super(BranchedTemporalConvNet, self).__init__()
+        self.branch = branch
+        if self.branch < 1:
+            raise ValueError("To branch the end of the network, you must specify a positive number of branches.")
+        layers = []
+        num_levels = len(num_channels)
+        for i in range(num_levels):
+            dilation_size = 2 ** i
+            in_channels = num_inputs if i == 0 else num_channels[i-1]
+            out_channels = num_channels[i]
+            if i == num_levels - 1:
+                self.ends = nn.ModuleList([TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
+                                    padding=(kernel_size-1) * dilation_size, dropout=dropout) for j in range(self.branch)])
+            else:
+                layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
+                              padding=(kernel_size-1) * dilation_size, dropout=dropout)]
+
+        self.network = nn.Sequential(*layers)
+
+    def forward(self, x):
+        y1 = self.network(x)
+        outs = [self.ends[i](y1) for i in range(self.branch)]
+        return outs
+
+##################################################################
+#                           TCN Models                           #
+##################################################################
+
 class TCN(nn.Module):
     def __init__(self, input_size, output_size, num_channels, kernel_size, dropout):
         super(TCN, self).__init__()
@@ -77,3 +109,22 @@ class TCN(nn.Module):
         o = self.linear(y1[:,:,-1])
         o[:,1] = self.sigmoid(o[:,1])
         return o
+
+class BranchedTCN(nn.Module):
+    def __init__(self, input_size, output_size, num_channels, kernel_size, dropout):
+        super(BranchedTCN, self).__init__()
+        if output_size % 2 != 0:
+            raise ValueError("output_size must be divisible by 2.")
+        self.btcn = BranchedTemporalConvNet(input_size, num_channels, kernel_size=kernel_size, dropout=dropout, branch=2)
+        self.linear1 = nn.Linear(num_channels[-1], int(output_size / 2))
+        self.linear2 = nn.Linear(num_channels[-1], int(output_size / 2))
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, inputs):
+        y1 = self.btcn(inputs)
+        print(len(y1), y1[0].shape, y1[1].shape)
+        o1 = self.linear1(y1[0][:,:,-1])
+        o2 = self.linear2(y1[1][:,:,-1])
+        o2 = self.sigmoid(o2)
+        return torch.cat((o1, o2), 1)
