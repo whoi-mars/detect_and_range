@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import warnings
 
 class SelectiveMSEAndClass(nn.Module):
     
@@ -21,15 +22,18 @@ class SelectiveMSEAndClass(nn.Module):
         call_outs = outputs[c_labels.squeeze() == 1, 0]
         call_r_labels = r_labels[c_labels.squeeze() == 1]
         
-        # Ignore MSE loss entirely if there are no identified calls in the batch for some reason.
-        # In practice this shouldn't really happen because randomly initilized weights should
-        # produce a 50% classification accuracy as there are an equal number of noise/call examples.
+        # Ignore MSE loss entirely if there are no calls in the batch for some reason.
+        # In practice this shouldn't really happen because 
+        # there are an equal number of noise/call examples.
         if len(call_outs) == 0:
-            loss = self.BCE(outputs[:,1].squeeze(), c_labels.squeeze())
+            c_loss = self.BCE(outputs[:,1].squeeze(), c_labels.squeeze())
+            r_loss = 0
+            warnings.warn("No calls-containing examples in the batch.")
         else:
-            loss = self.alpha*self.MSE(call_outs.squeeze(), call_r_labels.squeeze()) + self.BCE(outputs[:,1].squeeze(), c_labels.squeeze())
+            c_loss = self.BCE(outputs[:,1].squeeze(), c_labels.squeeze())
+            r_loss = self.alpha*self.MSE(call_outs.squeeze(), call_r_labels.squeeze())
 
-        return loss
+        return r_loss + c_loss, r_loss, c_loss
     
 class UncertainSelectiveMSEAndClass(nn.Module):
     
