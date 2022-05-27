@@ -34,6 +34,39 @@ class SelectiveMSEAndClass(nn.Module):
             r_loss = self.alpha*self.MSE(call_outs.squeeze(), call_r_labels.squeeze())
 
         return r_loss + c_loss, r_loss, c_loss
+
+class SelectiveSSEAndClass(nn.Module):
+    
+    """
+    Class for loss which adds binary cross entropy loss and MSE loss
+    for range predictions. The MSE loss only penalizes incorrect range
+    predictions for examples of class 1 (with a call in the spectrogram).
+    """
+    
+    def __init__(self, alpha=1):
+        super().__init__()
+        self.MSE = nn.MSELoss(reduction='sum')
+        self.BCE = nn.BCELoss()
+        self.alpha = alpha
+        
+    def forward(self, outputs, r_labels, c_labels):
+        
+        # Isolate ranges for call-containing example only
+        call_outs = outputs[c_labels.squeeze() == 1, 0]
+        call_r_labels = r_labels[c_labels.squeeze() == 1]
+        
+        # Ignore MSE loss entirely if there are no calls in the batch for some reason.
+        # In practice this shouldn't really happen because 
+        # there are an equal number of noise/call examples.
+        if len(call_outs) == 0:
+            c_loss = self.BCE(outputs[:,1].squeeze(), c_labels.squeeze())
+            r_loss = 0
+            warnings.warn("No calls-containing examples in the batch.")
+        else:
+            c_loss = self.BCE(outputs[:,1].squeeze(), c_labels.squeeze())
+            r_loss = self.alpha*self.MSE(call_outs.squeeze(), call_r_labels.squeeze())
+
+        return r_loss + c_loss, r_loss, c_loss
     
 class UncertainSelectiveMSEAndClass(nn.Module):
     
