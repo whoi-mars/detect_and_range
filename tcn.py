@@ -123,7 +123,6 @@ class BranchedTCN(nn.Module):
 
     def forward(self, inputs):
         y1 = self.btcn(inputs)
-        print(len(y1), y1[0].shape, y1[1].shape)
         o1 = self.linear1(y1[0][:,:,-1])
         o2 = self.linear2(y1[1][:,:,-1])
         o2 = self.sigmoid(o2)
