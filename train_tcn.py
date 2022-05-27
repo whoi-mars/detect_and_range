@@ -6,14 +6,14 @@ import os
 import math
 import dataLoader
 import losses
-from tcn import TCN
+from tcn import BranchedTCN, TCN
 import config
 import argparse
 import wandb
 
 parser = argparse.ArgumentParser(description="TCN Training on KRAKEN Synthetic Data")
 parser.add_argument('--batch_size', type=int, default=128, metavar='N',
-                    help='batch size (default: 64')
+                    help='batch size (default: 128')
 parser.add_argument('--dropout', type=float, default=0.2,
                     help='dropout applied to layers (default: 0.2)')
 parser.add_argument('--start_epoch', type=int, default=1,
@@ -40,26 +40,31 @@ parser.add_argument('--verbose', action='store_true',
                     help='display progress while training (default: False)')
 parser.add_argument('--id', type=str,
                     help='id of run to continue'),
+parser.add_argument('--checkpoint_dir', type=str, default='TCN',
+                    help='directory where model weight checkpoints will be saved (default: TCN)')
 parser.add_argument('--resume', action='store_true',
                     help='resume previous weights and biases run (default: False)')
+parser.add_argument('--no_wandb', action='store_false',
+                    help='disables weights and biases logging (default: True')
 args = parser.parse_args()
 
 # log in to wandb and initialize
-wandb.login()
-wandb.init(
-    project="tcn-test",
-    config={
-        "epochs": args.end_epoch - args.start_epoch + 1,
-        "batch_size": args.batch_size,
-        "lr": args.lr,
-        "dropout": args.dropout,
-        "ksize": args.ksize,
-        "levels": args.levels,
-        "nhid": args.nhid,
-        "alpha": args.alpha
-    },
-    id=args.id,
-    resume=args.resume)
+if args.no_wandb:
+    wandb.login()
+    wandb.init(
+        project="tcn-test",
+        config={
+            "epochs": args.end_epoch - args.start_epoch + 1,
+            "batch_size": args.batch_size,
+            "lr": args.lr,
+            "dropout": args.dropout,
+            "ksize": args.ksize,
+            "levels": args.levels,
+            "nhid": args.nhid,
+            "alpha": args.alpha
+        },
+        id=args.id,
+        resume=args.resume)
 
 # Set seed
 torch.manual_seed(args.seed)
@@ -83,11 +88,12 @@ n_steps_per_epoch = math.ceil(len(dl['train'].dataset) / args.batch_size)
 # Create TCN model
 channel_sizes = [args.nhid] * args.levels
 n_outputs = 2
-input_channels = 232
+input_channels = config.input_channels
 model = TCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
+#model = BranchedTCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
 
 # Save directory for modle weights
-save_dir = config.models_dir + '/TCN'
+save_dir = os.path.join(config.models_dir, args.checkpoint_dir)
 os.makedirs(save_dir, exist_ok=True)
 
 # Create loss and optimizer
@@ -208,13 +214,14 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
                 running_call_count += torch.sum(c_labels.squeeze())
 
                 # Step-dependent wandb updates during training
-                if phase == 'train':
-                    step_metrics = {"train/train_loss": loss,
-                                    "train/range_loss": r_loss,
-                                    "train/class_loss": c_loss,
-                                    "train/epoch": (step + 1 + (n_steps_per_epoch * epoch)) / n_steps_per_epoch}
-                    if step + 1 < n_steps_per_epoch:
-                        wandb.log(step_metrics)
+                if args.no_wandb:
+                    if phase == 'train':
+                        step_metrics = {"train/train_loss": loss,
+                                        "train/range_loss": r_loss,
+                                        "train/class_loss": c_loss,
+                                        "train/epoch": (step + 1 + (n_steps_per_epoch * epoch)) / n_steps_per_epoch}
+                        if step + 1 < n_steps_per_epoch:
+                            wandb.log(step_metrics)
 
             # Calculate epoch statistics
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
@@ -224,20 +231,21 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
             epoch_acc = running_corrects / len(dataloaders[phase].dataset)
             
             # wandb logging for end of epoch
-            if phase == 'train':
-                train_metrics = {"train/train_avg_loss": epoch_loss,
-                                 "train/train_avg_range_loss": epoch_r_loss,
-                                 "train/train_avg_class_loss": epoch_c_loss,
-                                 "train/train_rmse": torch.sqrt(epoch_mse) / 1000,
-                                 "train/train_accuracy": epoch_acc}
-                wandb.log({**step_metrics, **train_metrics})
-            else:
-                val_metrics = {"val/val_avg_loss": epoch_loss,
-                               "val/val_avg_range_loss": epoch_r_loss,
-                               "val/val_avg_class_loss": epoch_c_loss,
-                               "val/val_rmse": torch.sqrt(epoch_mse) / 1000,
-                               "val/val_accuracy": epoch_acc}
-                wandb.log(val_metrics)
+            if args.no_wandb:
+                if phase == 'train':
+                    train_metrics = {"train/train_avg_loss": epoch_loss,
+                                    "train/train_avg_range_loss": epoch_r_loss,
+                                    "train/train_avg_class_loss": epoch_c_loss,
+                                    "train/train_rmse": torch.sqrt(epoch_mse) / 1000,
+                                    "train/train_accuracy": epoch_acc}
+                    wandb.log({**step_metrics, **train_metrics})
+                else:
+                    val_metrics = {"val/val_avg_loss": epoch_loss,
+                                "val/val_avg_range_loss": epoch_r_loss,
+                                "val/val_avg_class_loss": epoch_c_loss,
+                                "val/val_rmse": torch.sqrt(epoch_mse) / 1000,
+                                "val/val_accuracy": epoch_acc}
+                    wandb.log(val_metrics)
 
             # Print epoch info
             print("{} Loss: {:.4f} -- MSE: {:.4f} km^2 -- RMSE: {:.4f} km -- ACC: {:.4f}".format(phase, epoch_loss, epoch_mse / 1000000, torch.sqrt(epoch_mse) / 1000, epoch_acc))
@@ -259,7 +267,7 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
                 torch.save({'model_state_dict': model.state_dict(), 
                             'optimizer_state_dict': optimizer.state_dict(),
                            }, os.path.join(save_dir, 'weights_{}.pt'.format(epoch)))
-            
+
         print()
         
     # Training done!
