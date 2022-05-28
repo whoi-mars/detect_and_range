@@ -1,0 +1,8 @@
+h5py
+hdf5storage
+librosa
+matplotlib
+numpy
+scipy
+scikit-learn
+tqdm
