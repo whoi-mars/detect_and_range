@@ -2,11 +2,8 @@ from scipy.io import loadmat, savemat, wavfile
 from scipy.signal import stft, decimate
 import librosa
 from sklearn.model_selection import train_test_split
-from skimage import exposure
-from multiprocessing import Process, Manager
 import numpy as np
 from tqdm.notebook import tqdm
-from skimage.transform import resize
 import torch
 import torchvision
 from torchvision import transforms
@@ -34,9 +31,14 @@ class DataHandler():
 
         """
         Initialize attributes relevant to KRAKEN simulation.
+
         Parameters
         ----------
-        path: str, path to .mat file containing relevant data from the KRAKEN simulations
+        path: str, path to .mat file containing relevant data from the KRAKEN simulations.
+        noise_only_path: str, path to .mat file containing noise only examples.
+        data_dir: str, directory where all the data is stored.
+        mode: str, either 'mat' or 'wav' and indicates the source of the time-domain data.
+        fs_desired: int, desired fs for downsampling when loading data from wav files.
         """
 
         if mode != 'wav' and mode != 'mat':
@@ -47,7 +49,6 @@ class DataHandler():
 
         self.mode = mode
         self.fs_desired = fs_desired
-
         self.__path = path
         self.__data_dir = data_dir
         self.__noise_only_path = noise_only_path
@@ -58,16 +59,24 @@ class DataHandler():
         self.__load_mat()
 
     def __wav_2_mat(self):
+
+        """
+        Load data from wav files and saves it in a simmilar .mat format to the KRAKEN simulation output.
+        """
         
+        # gather names of all wav files in specified path
         files = os.listdir(self.__path)
         files = [f for f in files if ".wav" in f]
         num_files = len(files)
-        calls = None
 
+        # Load the calls
+        calls = None
         for idx, f in enumerate(files):
+            # Load an mean center a file
             fs, s = self.__load_wav(os.path.join(self.__path, f))
             s = s - s.mean()
 
+            # Optionally downsample
             if self.fs_desired is not None and self.fs_desired != fs:
                 s = resample(s, fs, self.fs_desired)
                 fs = self.fs_desired
@@ -80,6 +89,7 @@ class DataHandler():
             calls[:,idx] = s
             labels[:, idx] = float(f.split('-')[1].split('.')[0].replace('_','.'))*1000
 
+        # Save
         mdic = {u'p_t_r' : calls, u'labels' : labels, u'T' : T, u'fs' : fs}
         self.__path = os.path.join(self.__data_dir, 'wav_calls.mat')
         hdf5storage.write(mdic, '.', self.__path, matlab_compatible=True)
@@ -88,14 +98,14 @@ class DataHandler():
 
         """
         Add results from KRAKEN simulation as class attributes.
-        TODO: Parametarize which key-value pair we want to extract
         """
-        # Load KRAKEN simulation data
+        # Load KRAKEN simulation data/.mat file from wav files
         mat_calls = h5py.File(self.__path, 'r')
 
         # Extract individual vectors
         self.p_t_noise = mat_calls['p_t_r'][:].T
 
+        # Get theoretical start/end times if simulating
         if self.mode == 'mat':
             self.t_dec_min = np.squeeze(mat_calls['t_dec_min'][:])
             self.t_dec_max = np.squeeze(mat_calls['t_dec_max'][:])
@@ -114,11 +124,12 @@ class DataHandler():
             mat_noise.close()
 
         # Number of examples and labels
+        # gets the second dimension if simulated or just the length
+        # of the range list if it's from wav
         try:
             self.n_examples = self.labels.shape[1]
         except:
             self.n_examples = len(self.labels)
-        self.n_samples_per_example = self.labels.shape[0]
 
     def __load_wav(self, path):
 
@@ -138,13 +149,49 @@ class DataHandler():
         return fs, s
 
     def normalize_wav(self):
+
+        """
+        Normalize the time-domain signal to have 0 mean and 1 variance.
+        """
+
         self.p_t_noise = (self.p_t_noise - self.p_t_noise.mean(axis=0)) / self.p_t_noise.std(axis=0)
 
+    def create_signals(self, rand_shift=False, verbose=False):
+
+        """
+        Prepares time-domain signals for saving.
+
+        Parameters
+        ----------
+        rand_shift: bool, randomly shifts the signal such that the call is not wrapped (if present) or just 
+                    some random amount if the data is just noise.
+        verbose: bool, print tqdm progress bar.
+
+        Returns
+        -------
+        X: array-like, prepared data signals (n_examples, n_samples_per_example)
+        y: array-like, data labels (n_examples, 5)
+        """
+        
+        if self.mode == 'wav' and rand_shift == True:
+            raise ValueError("Randome shift not supported for exerimental data.")
+        for sig in tqdm(range(self.n_examples), disable=not verbose):
+
+            # Random wrapping using start/end time of call or just length of data if it is noise
+            if rand_shift and self.labels[4,sig]:
+                self.p_t_noise[:,sig] = self.__wrap_signal_random(self.p_t_noise[:,sig], self.t_dec_min[sig], self.t_dec_max[sig])
+            elif rand_shift and not self.labels[4,sig]:
+                self.p_t_noise[:,sig] = self.__wrap_signal_random(self.p_t_noise[:,sig])
+
+        self.y = self.labels.T.astype('float32')
+        self.X = self.p_t_noise.T
+
+        return self.X, self.y
+             
     def create_spectrograms(self, fs=None, rand_shift=False, nperseg=31, noverlap=23, nfft=500, verbose=False):
         
         """
         Create spectrograms using dispersive calls from KRAKEN simulation. 
-        TODO: Specify number of files or max file memory.
 
         Parameters
         ----------
@@ -159,10 +206,9 @@ class DataHandler():
         -------
         X: array-like, calculated spectrograms of shape (n_examples, Zxx.shape[0], Zxx.shape[1]).
         y: array-like, labels of shape (n_labels, n_examples).
+        f: array-like, frequency axis.
+        t: array-like, time axis.
         """
-
-        # For 3 channel nperseg = 60, noverlap = [59, 40, 20], nfft = 447
-        # For 1 channel nperseg = 60, noverlap = 52, nfft = 750
 
         if fs is None:
             fs = self.fs
@@ -170,41 +216,29 @@ class DataHandler():
         if self.mode == 'wav' and rand_shift == True:
             raise ValueError("Randome shift not supported for exerimental data.")
 
-        if channels > len(nperseg_list):
-            raise ValueError("Number of channels desired is greater than specified noverlaps in the function's 'noverlap_list' variable.")
-
-        if size is None:
-            # Generate one spectrogram to get the dimensions for the current settings
-            [_,_,Zxx] = stft(x=self.p_t_noise[:,0], fs=fs, nperseg=nperseg, noverlap=noverlap, nfft=nfft)
-            self.X = np.ones((self.n_examples, channels, Zxx.shape[0], Zxx.shape[1]), dtype='float32')
-        else:
-            self.X = np.zeros((self.n_examples, channels, size[0], size[1]), dtype='float32')
-        self.y = self.labels
+        # Generate one spectrogram to get the dimensions for the current settings
+        [_,_,Zxx] = stft(x=self.p_t_noise[:,0], fs=fs, nperseg=nperseg, noverlap=noverlap, nfft=nfft)
+        self.X = np.zeros((self.n_examples, channels, Zxx.shape[0], Zxx.shape[1]), dtype='float32')
 
         for sig in tqdm(range(self.n_examples), disable=not verbose):
 
-        # Random wrapping using start/end time of call or just length of data if it is noise
-        if rand_shift and self.labels[4,sig]:
-            self.p_t_noise[:,sig] = self.__wrap_signal_random(self.p_t_noise[:,sig], self.t_dec_min[sig], self.t_dec_max[sig])
-        elif rand_shift and not self.labels[4,sig]:
-            self.p_t_noise[:,sig] = self.__wrap_signal_random(self.p_t_noise[:,sig])
+            # Random wrapping using start/end time of call or just length of data if it is noise
+            if rand_shift and self.labels[4,sig]:
+                self.p_t_noise[:,sig] = self.__wrap_signal_random(self.p_t_noise[:,sig], self.t_dec_min[sig], self.t_dec_max[sig])
+            elif rand_shift and not self.labels[4,sig]:
+                self.p_t_noise[:,sig] = self.__wrap_signal_random(self.p_t_noise[:,sig])
 
-            [f, t, Zxx] = stft(x=self.p_t_noise[:,sig], fs=fs, nperseg=nperseg, noverlap=noverlap, nfft=nfft)
-            log_spec = np.flipud(10*np.log10(np.abs(Zxx)**2))
-            if size is not None:
-                log_spec = resize(log_spec, size, anti_aliasing=True)
-            
-            # Save data
-            log_spec = log_spec[np.newaxis, :,:]
-            self.X[sig,:,:,:] = log_spec
-
-            if sig == 10:
-                break
-        # Normalize between 0 and 1
-        # self.X = (self.X - self.X.min(axis=(2,3), keepdims=True)) / (self.X.max(axis=(2,3), keepdims=True) - self.X.min(axis=(2,3), keepdims=True))
+                [f, t, Zxx] = stft(x=self.p_t_noise[:,sig], fs=fs, nperseg=nperseg, noverlap=noverlap, nfft=nfft)
+                log_spec = np.flipud(10*np.log10(np.abs(Zxx)**2))
+                if size is not None:
+                    log_spec = resize(log_spec, size, anti_aliasing=True)
+                
+                # Save data
+                log_spec = log_spec[np.newaxis, :,:]
+                self.X[sig,:,:,:] = log_spec
 
         # Make first dimension the number of examples
-        self.y = self.y.T.astype('float32')
+        self.y = self.labels.T.astype('float32')
 
         return self.X, self.y, f, t
 
@@ -261,18 +295,39 @@ class DataHandler():
     def save_split_h5(self, train_path, val_path, test_path=None, val_size=None, test_size=None, train_size=None, random_state=None, shuffle=True, stratify=None):
         
         """
-        Save spectrograms and labels in h5 format.
+        Save data and labels in h5 format and split into train, validation, and test set.
+
         Parameters
         ----------
-        path: str, path where the h5 file will be saved.
+        train_path: str, path where the train h5 file will be saved.
+        val_path: str, path where the validation h5 file will be saved.
+        test_path: str, path where the test h5 file will be saved.
+        val_size: float, decimal percentage of data for validation.
+        test_size: float, decimal percentage of data for testing.
+        train_size: float, decimal percentage of data for training.
+        random_state: int, RandomState instance or None, Controls the 
+                      shuffling applied to the data before applying the 
+                      split. Pass an int for reproducible output across 
+                      multiple function calls.
+        shuffle: bool, Whether or not to shuffle the data before splitting. 
+                 If shuffle=False then stratify must be None.
+        stratify: array-like, If not None, data is split in a stratified 
+                  fashion, using this as the class labels.
         """
-        print("Split data")
+
         if self.X is None or self.y is None:
             raise Exception("Spectram data has not yet been created.")
 
-        inds = np.arange(self.X.shape[0])
+        if len(self.X.shape) == 3:
+            maxshape = (None, self.X.shape[0], self.X.shape[1], self.X.shape[2])
+            chunks = (1, self.X.shape[0], self.X.shape[1], self.X.shape[2])
+        else:
+            maxshape = (None, self.X.shape[1])
+            chunks = (1, self.X.shape[1])
 
+        print("Splitting Data...")
         # Train/val split
+        inds = np.arange(self.X.shape[0])
         X_train, X_val, y_train, y_val = train_test_split(inds, inds, test_size=val_size, train_size=train_size, random_state=random_state, shuffle=shuffle, stratify=stratify)
         
         # Test split from training data
@@ -281,13 +336,13 @@ class DataHandler():
             X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=test_size, train_size=train_size, random_state=random_state, shuffle=shuffle, stratify=stratify)
 
 
-        print("Save")
+        print("Saving Data...")
         c = 10000
         remain = (self.X[X_train].shape[0] % c)
         top = self.X[X_train].shape[0] - remain
         with h5py.File(train_path, 'a') as f:
             i = 0
-            f.create_dataset("data", data=self.X[X_train][:i+c,...], chunks=(1,1,226,226), maxshape=(None,1,226,226))
+            f.create_dataset("data", data=self.X[X_train][:i+c,...], chunks=chunks, maxshape=maxshape)
             f.create_dataset("labels", data=self.y[y_train][:i+c,...], chunks=(1,5), maxshape=(None,5))
             i += c
             while True:
@@ -311,7 +366,7 @@ class DataHandler():
         top = self.X[X_test].shape[0] - remain
         with h5py.File(test_path, 'a') as f:
             i = 0
-            f.create_dataset("data", data=self.X[X_test][:i+c,...], chunks=(1,1,226,226), maxshape=(None,1,226,226))
+            f.create_dataset("data", data=self.X[X_test][:i+c,...], chunks=chunks, maxshape=maxshape)
             f.create_dataset("labels", data=self.y[y_test][:i+c,...], chunks=(1,5), maxshape=(None,5))
             i += c
             while True:
@@ -335,7 +390,7 @@ class DataHandler():
         top = self.X[X_val].shape[0] - remain
         with h5py.File(val_path, 'a') as f:
             i = 0
-            f.create_dataset("data", data=self.X[X_val][:i+c,...], chunks=(1,1,226,226), maxshape=(None,1,226,226))
+            f.create_dataset("data", data=self.X[X_val][:i+c,...], chunks=chunks, maxshape=maxshape)
             f.create_dataset("labels", data=self.y[y_val][:i+c,...], chunks=(1,5), maxshape=(None,5))
             i += c
             while True:
