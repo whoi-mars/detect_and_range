@@ -29,14 +29,20 @@ exp_data = data_dir + '/wav_calls.h5'
 ##################################################################
 
 # Maximum range of training data
-max_range = 35000 # [km]
+max_range = 38000 # [km]
 # Training data mean
-mu = -30.5419 # [dB]
+mu = -30.5122 # [dB]
 # Training data std
-std = 11.9643 # [dB]
+std = 11.9538 # [dB]
 # Trained fs
 fs = 600 # [samples / s]
 # Trained signal window period
 T = 6 # [s]
 # H dimension of image
 input_channels = 226
+# Window size for spectrograms
+nperseg = 62
+# Window overlap for spectrograms
+noverlap = 46
+# Number of frequency bins for spectrograms
+nfft = 451
