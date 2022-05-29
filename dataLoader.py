@@ -2,11 +2,35 @@ import torch
 import torchvision
 from torchvision import transforms
 from torch.utils import data
+from scipy.signal import stft
 import h5py
 import numpy as np
 import os
 from data_augmentation import FrequencyBandZeroing
 import config
+
+def to_spect(x):
+
+    """
+    Calculates a batch of spectrograms from time-domain signals.
+
+    Parameters
+    ----------
+    x: array-like, matrix of time-domain signals from which to calculate spectrograms. Should be of
+       shape (# signals, # samples / signal)
+    
+    Returns
+    -------
+    log_spec: array-like, resulting spectrograms. Of shape (# signals, 1, # frequency bins, # time bins)
+    """
+
+    # Calculate STFTs
+    [f, t, Zxx] = stft(x=x, fs=config.fs, nperseg=config.nperseg, noverlap=config.noverlap, nfft=config.nfft)
+    # Get dB power of each spectrogram and put matrix in correct orientation
+    log_spec = np.flip(10*np.log10(np.abs(Zxx)**2), axis=1)
+    # Add channel dimension
+    log_spec = log_spec[:,np.newaxis,...]
+    return log_spec
 
 class Gunshot(data.Dataset):
     """Dataset to load data from the Oxford pet dataset .h5 files
@@ -14,7 +38,7 @@ class Gunshot(data.Dataset):
     :type dir_path: str
     """
 
-    def __init__(self, dir_path, max_range, transform=None, squeeze=False):
+    def __init__(self, dir_path, max_range, transform=None, squeeze=False, from_time=True):
 
         super(Gunshot, self).__init__()
 
@@ -22,11 +46,17 @@ class Gunshot(data.Dataset):
         self.transform = transform
         self.squeeze = squeeze
         self.inputs, self.imsize = self._load_h5_file_with_data()
+        if from_time:
+            self.imsize = to_spect([self.inputs['data'][0]]).shape[2:]
         self.max_range = max_range
+        self.from_time = from_time
 
     def __getitem__(self, index):
-
-        inputs = self._from_numpy(self.inputs['data'][index])
+        
+        inputs = self.inputs['data'][[index]]
+        if self.from_time:
+            inputs = to_spect(inputs).squeeze(axis=1).copy()
+        inputs = self._from_numpy(inputs)
         class_targets = self._from_numpy(np.asarray([self.inputs['labels'][index,4]]))
         range_targets = self._from_numpy(np.asarray([self.inputs['labels'][index,0]]))
         range_targets[range_targets != -1] = range_targets / self.max_range
@@ -55,7 +85,7 @@ class Warped(data.Dataset):
     :type dir_path: str
     """
 
-    def __init__(self, dir_path, max_range, transform=None, squeeze=False):
+    def __init__(self, dir_path, max_range, transform=None, squeeze=False, from_time=True):
 
         super(Warped, self).__init__()
 
@@ -63,11 +93,17 @@ class Warped(data.Dataset):
         self.transform = transform
         self.squeeze = squeeze
         self.inputs, self.imsize = self._load_h5_file_with_data()
+        if from_time:
+            self.imsize = to_spect([self.inputs['data'][0]]).shape[2:]
         self.max_range = max_range
+        self.from_time = from_time
 
     def __getitem__(self, index):
 
-        inputs = self._from_numpy(self.inputs['data'][index])
+        inputs = self.inputs['data'][[index]]
+        if self.from_time:
+            inputs = to_spect(inputs).squeeze(axis=1).copy()
+        inputs = self._from_numpy(inputs)
         class_targets = 1.
         range_targets = self._from_numpy(np.asarray(self.inputs['labels'][index]))
         range_targets = range_targets / self.max_range
@@ -91,14 +127,19 @@ class Warped(data.Dataset):
         return dict(data=file['data'], labels=file['labels']), file['data'].shape[2:]
 
 class RandomBatchSampler(data.Sampler):
-    """Sampling class to create random sequential batches from a given dataset
+    """
+    Sampling class to create random sequential batches from a given dataset
     E.g. if data is [1,2,3,4] with bs=2. Then first batch, [[1,2], [3,4]] then shuffle batches -> [[3,4],[1,2]]
     This is useful for cases when you are interested in 'weak shuffling'
-    :param dataset: dataset you want to batch
-    :type dataset: torch.utils.data.Dataset
-    :param batch_size: batch size
-    :type batch_size: int
-    :returns: generator object of shuffled batch indices
+    
+    Parameters
+    ----------
+    dataset: torch.utils.data.Dataset, dataset you want to batch
+    batch_size: int, batch size
+    
+    Returns
+    -------
+    generator object of shuffled batch indices
     """
     def __init__(self, dataset, batch_size):
         self.batch_size = batch_size
@@ -120,7 +161,8 @@ class RandomBatchSampler(data.Sampler):
                 yield int(index)
 
 def fast_loader(dataset, batch_size=32, drop_last=False, transforms=None):
-    """Implements fast loading by taking advantage of .h5 dataset
+    """
+    Implements fast loading by taking advantage of .h5 dataset
     The .h5 dataset has a speed bottleneck that scales (roughly) linearly with the number
     of calls made to it. This is because when queries are made to it, a search is made to find
     the data item at that index. However, once the start index has been found, taking the next items
@@ -128,14 +170,16 @@ def fast_loader(dataset, batch_size=32, drop_last=False, transforms=None):
     is almost the same as just data[start_index]. The fast loading scheme takes advantage of this. However,
     because the goal is NOT to load the entirety of the data in memory at once, weak shuffling is used instead of
     strong shuffling.
-    :param dataset: a dataset that loads data from .h5 files
-    :type dataset: torch.utils.data.Dataset
-    :param batch_size: size of data to batch
-    :type batch_size: int
-    :param drop_last: flag to indicate if last batch will be dropped (if size < batch_size)
-    :type drop_last: bool
-    :returns: dataloading that queries from data using shuffled batches
-    :rtype: torch.utils.data.DataLoader
+    
+    Parameters
+    ----------
+    dataset: torch.utils.data.Dataset, a dataset that loads data from .h5 files
+    batch_size: int, size of data to batch
+    drop_last: bool, flag to indicate if last batch will be dropped (if size < batch_size)
+    
+    Returns
+    -------
+    torch.utils.data.DataLoader, dataloading that queries from data using shuffled batches
     """
     return data.DataLoader(
         dataset, batch_size=None,  # must be disabled when using samplers
@@ -201,7 +245,7 @@ def get_dataloaders(data_dir, batch_size, max_range, shuffle=True, transform=Non
         datasets = {x: Gunshot(dir_path=os.path.join(config.data_dir, 'grid_data_atten_big_{}.h5'.format(x)), max_range=config.max_range, transform=data_transforms[x], squeeze=squeeze) for x in data_transforms.keys()}
 
         # Make dataloaders
-        dataloaders = {x: data.DataLoader(datasets[x], batch_size=batch_size, shuffle=False if x != 'train' else shuffle) for x in data_transforms.keys()}
+        dataloaders = {x: data.DataLoader(datasets[x], batch_size=batch_size, shuffle=False if x != 'train' else shuffle, num_workers=8) for x in data_transforms.keys()}
 
         return dataloaders
     else:
