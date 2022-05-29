@@ -29,7 +29,9 @@ exp_data = data_dir + '/wav_calls.h5'
 ##################################################################
 
 # Maximum range of training data
-max_range = 38000 # [km]
+max_range = 38000 # [m]
+# Minimum range of training data
+min_range = 4000 # [m]
 # Training data mean
 mu = -30.5122 # [dB]
 # Training data std
