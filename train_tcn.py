@@ -61,7 +61,10 @@ if args.no_wandb:
             "ksize": args.ksize,
             "levels": args.levels,
             "nhid": args.nhid,
-            "alpha": args.alpha
+            "alpha": args.alpha,
+            "nperseg": config.nperseg,
+            "noverlap": config.noverlap,
+            "nfft": config.nfft
         },
         id=args.id,
         resume=args.resume)
@@ -90,7 +93,6 @@ channel_sizes = [args.nhid] * args.levels
 n_outputs = 2
 input_channels = config.input_channels
 model = TCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
-#model = BranchedTCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
 
 # Save directory for modle weights
 save_dir = os.path.join(config.models_dir, args.checkpoint_dir)
