@@ -116,8 +116,8 @@ class BranchedTCN(nn.Module):
         if output_size % 2 != 0:
             raise ValueError("output_size must be divisible by 2.")
         self.btcn = BranchedTemporalConvNet(input_size, num_channels, kernel_size=kernel_size, dropout=dropout, branch=2)
-        self.linear1 = nn.Linear(num_channels[-1], int(output_size / 2))
-        self.linear2 = nn.Linear(num_channels[-1], int(output_size / 2))
+        self.linear1 = nn.Linear(num_channels[-1], output_size // 2)
+        self.linear2 = nn.Linear(num_channels[-1], output_size // 2)
 
         self.sigmoid = nn.Sigmoid()
 
