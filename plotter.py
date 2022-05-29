@@ -1,3 +1,4 @@
+from dataLoader import to_spect
 import matplotlib.pyplot as plt
 import numpy as np
 import random
@@ -23,15 +24,21 @@ def plot_grid(images_arr, labels_arr, label_text, title, dim=(3, 3), randomize=T
     if type(dim) != tuple or len(dim) != 2:
         raise Exception("dim needs to be a 2D tuple specifying the dimensions of the image grid")
 
+    total_examples = dim[0]*dim[1]
     if randomize:
-        total_examples = dim[0] * dim[1]
         inds = random.choices(range(len(images_arr)), k=total_examples)
-        images_arr = images_arr[inds,:,:,:]
+        images_arr = images_arr[inds,...]
         labels_arr = labels_arr[inds]
+    else:
+        images_arr = images_arr[:total_examples,...]
+        labels_arr = labels_arr[:total_examples]
+
+    if len(images_arr.shape) == 2:
+        images_arr = to_spect(images_arr)
 
     if dim == (1, 1):
         plt.title(title)
-        plt.imshow(np.squeeze(images_arr[0]), aspect='auto')
+        plt.imshow(np.squeeze(images_arr), aspect='auto')
         plt.axis('off')
         if sub_titles:
             plt.title("{}: {}".format(label_text, round(labels_arr[0],2)))
