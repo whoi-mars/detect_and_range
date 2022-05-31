@@ -8,9 +8,7 @@ def plot_grid(images_arr, labels_arr, label_text, title, dim=(3, 3), randomize=T
     """
     Plots an array of images and their corresponding labels.
     
-    Parametersnperseg: int, number of samples per window.
-        noverlap: int, number of samples overlap between windows.
-        nfft: int, number of frequency 'bins' on the frequency axis of the spectrogram.
+    Parameters
     ----------
     images_arr: 2D array-like, array of images
     labels_arr: array-like, array of labels which correspond in order to the images
