@@ -40,8 +40,6 @@ std = 11.9538 # [dB]
 fs = 600 # [samples / s]
 # Trained signal window period
 T = 6 # [s]
-# H dimension of image
-input_channels = 226
 # Window size for spectrograms
 nperseg = 62
 # Window overlap for spectrograms
