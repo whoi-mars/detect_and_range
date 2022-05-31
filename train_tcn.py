@@ -91,7 +91,7 @@ n_steps_per_epoch = math.ceil(len(dl['train'].dataset) / args.batch_size)
 # Create TCN model
 channel_sizes = [args.nhid] * args.levels
 n_outputs = 2
-input_channels = config.input_channels
+input_channels = dl['train'].dataset.imsize[0]
 model = TCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
 
 # Save directory for modle weights
