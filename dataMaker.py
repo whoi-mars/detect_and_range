@@ -62,6 +62,8 @@ class DataHandler():
 
         """
         Load data from wav files and saves it in a simmilar .mat format to the KRAKEN simulation output.
+        This function assumes that the .wav files each contain 1 call and are named 'id-range' where 'range'
+        is in kilometers. For example, '4-27_8.wav' for a call with id 4 that has label 27.8 km.
         """
         
         # gather names of all wav files in specified path
@@ -335,9 +337,10 @@ class DataHandler():
             test_size = test_size / train_size
             X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=test_size, train_size=train_size, random_state=random_state, shuffle=shuffle, stratify=stratify)
 
-
-        print("Saving Data...")
+        # Chunk size to use when saving data to .h5 file in batches
         c = 10000
+
+        print("Saving Training Data...")
         remain = (self.X[X_train].shape[0] % c)
         top = self.X[X_train].shape[0] - remain
         with h5py.File(train_path, 'a') as f:
@@ -362,30 +365,33 @@ class DataHandler():
                 i += c
                 print(f["data"].shape)
 
-        remain = (self.X[X_test].shape[0] % c)
-        top = self.X[X_test].shape[0] - remain
-        with h5py.File(test_path, 'a') as f:
-            i = 0
-            f.create_dataset("data", data=self.X[X_test][:i+c,...], chunks=chunks, maxshape=maxshape)
-            f.create_dataset("labels", data=self.y[y_test][:i+c,...], chunks=(1,5), maxshape=(None,5))
-            i += c
-            while True:
-                if i == top:
-                    f["data"].resize((f["data"].shape[0] + remain), axis=0)
-                    f["data"][i:,...] = self.X[X_test][i:,...]
-
-                    f["labels"].resize((f["labels"].shape[0] + remain), axis=0)
-                    f["labels"][i:,...] = self.y[y_test][i:,...]
-                    break
-                else:
-                    f["data"].resize((f["data"].shape[0] + c), axis=0)
-                    f["data"][i:i+c,...] = self.X[X_test][i:i+c,...]
-
-                    f["labels"].resize((f["labels"].shape[0] + c), axis=0)
-                    f["labels"][i:i+c,...] = self.y[y_test][i:i+c,...]
+        if test_size is not None:
+            print("Saving Test Data...")
+            remain = (self.X[X_test].shape[0] % c)
+            top = self.X[X_test].shape[0] - remain
+            with h5py.File(test_path, 'a') as f:
+                i = 0
+                f.create_dataset("data", data=self.X[X_test][:i+c,...], chunks=chunks, maxshape=maxshape)
+                f.create_dataset("labels", data=self.y[y_test][:i+c,...], chunks=(1,5), maxshape=(None,5))
                 i += c
-                print(f["data"].shape)
+                while True:
+                    if i == top:
+                        f["data"].resize((f["data"].shape[0] + remain), axis=0)
+                        f["data"][i:,...] = self.X[X_test][i:,...]
 
+                        f["labels"].resize((f["labels"].shape[0] + remain), axis=0)
+                        f["labels"][i:,...] = self.y[y_test][i:,...]
+                        break
+                    else:
+                        f["data"].resize((f["data"].shape[0] + c), axis=0)
+                        f["data"][i:i+c,...] = self.X[X_test][i:i+c,...]
+
+                        f["labels"].resize((f["labels"].shape[0] + c), axis=0)
+                        f["labels"][i:i+c,...] = self.y[y_test][i:i+c,...]
+                    i += c
+                    print(f["data"].shape)
+
+        print("Saving Validation Data")
         remain = (self.X[X_val].shape[0] % c)
         top = self.X[X_val].shape[0] - remain
         with h5py.File(val_path, 'a') as f:
