@@ -29,13 +29,31 @@ def to_spect(x):
     # Get dB power of each spectrogram and put matrix in correct orientation
     log_spec = np.flip(10*np.log10(np.abs(Zxx)**2), axis=1)
     # Add channel dimension
-    log_spec = log_spec[:,np.newaxis,...]
+    log_spec = log_spec[:, np.newaxis, ...]
     return log_spec
 
 class Gunshot(data.Dataset):
-    """Dataset to load data from the Oxford pet dataset .h5 files
-    :param dir_path: path to directory containing data (e.g. train, test or val)
-    :type dir_path: str
+
+    """
+    Dataset to load KRAKEN simulated data. It expects the data to be stored in a .h5 file format
+    with 'data' and 'labels' keys. The 'data' should be of shape (# examples, # samples_per_example)
+    while the labels are of shape (# examples, 5) where each row contains (range [m], cb [m/s], cw [m/s],
+    zs [m], and class label [either 0 or 1]).
+
+    Parameters
+    ----------
+    dir_path: str, path to the .h5 file containing data.
+    max_range: float, maximum range value (in meters) included in the simulated data set. This value will
+               be used to normalize the labels.
+    transform: torchvision.transforms.Compose, transformation composition to apply.
+    squeeze: bool, whether or not to squeeze the unit channel dimension.
+    from_time: bool, whether or not the data is a timeseries or needs to be transformed into spectrograms.
+
+    Returns
+    -------
+    inputs: array-like, spectrograms.
+    range_targets: float, ranges normalized to [0, 1]
+    class_targets: int, class labels
     """
 
     def __init__(self, dir_path, max_range, transform=None, squeeze=False, from_time=True):
@@ -80,9 +98,27 @@ class Gunshot(data.Dataset):
         return dict(data=file['data'][:], labels=file['labels'][:]), file['data'].shape[2:]
 
 class Warped(data.Dataset):
-    """Dataset to load data from the Oxford pet dataset .h5 files
-    :param dir_path: path to directory containing data (e.g. train, test or val)
-    :type dir_path: str
+
+    """
+    Dataset to load examples from experimental data which have been ranged using the warping technique.
+    This dataset object is the exact same as the Gunshot one above except for the fact that it expects
+    the 'labels' in the .h5 file to be a 1D array of ranges (in meters), and the class label is generated
+    within the dataset object and is always 1.
+
+    Parameters
+    ----------
+    dir_path: str, path to the .h5 file containing data.
+    max_range: float, maximum range value (in meters) included in the simulated data set. This value will
+               be used to normalize the labels.
+    transform: torchvision.transforms.Compose, transformation composition to apply.
+    squeeze: bool, whether or not to squeeze the unit channel dimension.
+    from_time: bool, whether or not the data is a timeseries or needs to be transformed into spectrograms.
+
+    Returns
+    -------
+    inputs: array-like, spectrograms.
+    range_targets: float, ranges normalized to [0, 1]
+    class_targets: int, class labels
     """
 
     def __init__(self, dir_path, max_range, transform=None, squeeze=False, from_time=True):
