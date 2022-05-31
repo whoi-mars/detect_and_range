@@ -8,6 +8,10 @@ class SelectiveMSEAndClass(nn.Module):
     Class for loss which adds binary cross entropy loss and MSE loss
     for range predictions. The MSE loss only penalizes incorrect range
     predictions for examples of class 1 (with a call in the spectrogram).
+
+    Parameters
+    ----------
+    alpha: float, weight coefficient for the range loss term.
     """
     
     def __init__(self, alpha=1):
@@ -38,9 +42,13 @@ class SelectiveMSEAndClass(nn.Module):
 class SelectiveSSEAndClass(nn.Module):
     
     """
-    Class for loss which adds binary cross entropy loss and MSE loss
-    for range predictions. The MSE loss only penalizes incorrect range
+    Class for loss which adds binary cross entropy loss and SSE loss
+    for range predictions. The SSE loss only penalizes incorrect range
     predictions for examples of class 1 (with a call in the spectrogram).
+
+    Parameters
+    ----------
+    alpha: float, weight coefficient for the range loss term.
     """
     
     def __init__(self, alpha=1):
