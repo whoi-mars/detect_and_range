@@ -42,10 +42,16 @@ parser.add_argument('--id', type=str,
                     help='id of run to continue'),
 parser.add_argument('--checkpoint_dir', type=str, default='TCN',
                     help='directory where model weight checkpoints will be saved (default: TCN)')
+parser.add_argument('--source_dir', type=str,
+                    help='optional directory to source model from to continue training and save to another directory')
 parser.add_argument('--resume', action='store_true',
                     help='resume previous weights and biases run (default: False)')
 parser.add_argument('--no_wandb', action='store_false',
                     help='disables weights and biases logging (default: True')
+parser.add_argument('--data_parallel', action='store_true',
+                    help='wraps the model in a torch.nn.DataParallel object to enable training with multiple GPUs (default: False)')
+parser.add_argument('--freeze_class', action='store_true',
+                    help='freezes the parameters associated with the class prediction (default: False)')
 args = parser.parse_args()
 
 # log in to wandb and initialize
@@ -64,7 +70,8 @@ if args.no_wandb:
             "alpha": args.alpha,
             "nperseg": config.nperseg,
             "noverlap": config.noverlap,
-            "nfft": config.nfft
+            "nfft": config.nfft,
+            "model_dir": args.checkpoint_dir
         },
         id=args.id,
         resume=args.resume)
@@ -73,7 +80,7 @@ if args.no_wandb:
 torch.manual_seed(args.seed)
 
 # Get device
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if torch.cuda.is_available():
     print("Using the GPU!")
 else:
@@ -92,7 +99,18 @@ n_steps_per_epoch = math.ceil(len(dl['train'].dataset) / args.batch_size)
 channel_sizes = [args.nhid] * args.levels
 n_outputs = 2
 input_channels = dl['train'].dataset.imsize[0]
+
+# Print size of input
+print(f"Spectrogram size: {dl['train'].dataset.imsize}")
+
+# Initialize model
+#model = BranchedTCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
 model = TCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
+
+# Freeze class parameters
+if isinstance(model, BranchedTCN) and args.freeze_class:
+    model.freeze_class()
+    print("Class Prediction Weights Frozen")
 
 # Save directory for modle weights
 save_dir = os.path.join(config.models_dir, args.checkpoint_dir)
@@ -104,12 +122,43 @@ optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
 # Load weights to start training at start epoch
 if args.start_epoch > 1:
+
+    # Check if alternate source directory
+    if args.source_dir is not None:
+        source_dir = os.path.join(config.models_dir, args.source_dir)
+        print(f"Sourceing Weights From: {source_dir}")
+    else:
+        source_dir = save_dir
+
     try:
-        checkpoint = torch.load(os.path.join(save_dir, f'weights_{args.start_epoch - 1}.pt'))
+        checkpoint = torch.load(os.path.join(source_dir, f'weights_{args.start_epoch - 1}.pt'))
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     except:
         raise ValueError("Desired start epoch does not have a corresponding set of saved model weights.")
+
+if args.data_parallel:
+    model = torch.nn.DataParallel(model)
+
+def get_model_state_dict(model):
+
+    """
+    Save the model state dictionary, taking into account whether
+    or not the model is wrapped in a torch.nn.DataParallel object.
+
+    Parameters
+    ----------
+    model: torch.nn.Module, model to save state dict for.
+
+    Returns
+    -------
+    state_dict, state dictionary for model.
+    """
+
+    if isinstance(model, torch.nn.DataParallel):
+        return model.module.state_dict()
+    else:
+        return model.state_dict()
 
 def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_dir=None, save_all_epochs=False, start_epoch=1):
     
@@ -152,7 +201,7 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
     
     
     # Initialize best model
-    best_model_wts = copy.deepcopy(model.state_dict())
+    best_model_wts = copy.deepcopy(get_model_state_dict(model))
     best_opt_state = copy.deepcopy(optimizer.state_dict())
     best_mse = float('inf')
     
@@ -255,7 +304,7 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
             # Deep copy model
             if phase == 'val' and epoch_mse < best_mse:
                 best_mse = epoch_mse
-                best_model_wts = copy.deepcopy(model.state_dict())
+                best_model_wts = copy.deepcopy(get_model_state_dict(model))
                 best_opt_state = copy.deepcopy(optimizer.state_dict())
             if phase == 'train':
                 train_mse_history.append(epoch_mse / 1000000)
@@ -266,7 +315,7 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
                 val_rmse_history.append(torch.sqrt(epoch_mse) / 1000)
                 val_acc_history.append(epoch_acc)
             if phase == 'train' and save_all_epochs:
-                torch.save({'model_state_dict': model.state_dict(), 
+                torch.save({'model_state_dict': get_model_state_dict(model), 
                             'optimizer_state_dict': optimizer.state_dict(),
                            }, os.path.join(save_dir, 'weights_{}.pt'.format(epoch)))
 
@@ -283,7 +332,7 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
                 'optimizer_state_dict': best_opt_state,
                 }, os.path.join(save_dir, 'weights_best_val_mse.pt'))
     if not save_all_epochs:
-        torch.save({'model_state_dict': model.state_dict(),
+        torch.save({'model_state_dict': get_model_state_dict(model),
                     'optimizer_state_dict': optimizer.state_dict() 
                    }, os.path.join(save_dir, 'weights_last_{}.pt'.format(epoch)))
     
