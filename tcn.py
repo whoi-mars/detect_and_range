@@ -121,6 +121,14 @@ class BranchedTCN(nn.Module):
 
         self.sigmoid = nn.Sigmoid()
 
+    def freeze_class(self):
+        for param in self.btcn.network.parameters():
+            param.requires_grad = False
+        for param in self.btcn.ends[1].parameters():
+            param.requires_grad = False
+        for param in self.linear2.parameters():
+            param.requires_grad = False
+            
     def forward(self, inputs):
         y1 = self.btcn(inputs)
         o1 = self.linear1(y1[0][:,:,-1])
