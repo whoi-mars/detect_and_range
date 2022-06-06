@@ -238,7 +238,7 @@ def get_image_transforms():
 
     transform_train = transforms.Compose([
         transforms.Normalize([config.mu], [config.std]),
-        FrequencyBandZeroing(max_freq_width=30)
+        FrequencyBandZeroing(max_freq_width=30, max_t_width=30, num_f=1, num_t=6)
     ])
 
     transform_dict = {'train': transform_train, 'eval': transform_eval}
@@ -281,7 +281,7 @@ def get_dataloaders(data_dir, batch_size, max_range, shuffle=True, transform=Non
         datasets = {x: Gunshot(dir_path=os.path.join(config.data_dir, 'grid_data_atten_big_{}.h5'.format(x)), max_range=config.max_range, transform=data_transforms[x], squeeze=squeeze) for x in data_transforms.keys()}
 
         # Make dataloaders
-        dataloaders = {x: data.DataLoader(datasets[x], batch_size=batch_size, shuffle=False if x != 'train' else shuffle, num_workers=8) for x in data_transforms.keys()}
+        dataloaders = {x: data.DataLoader(datasets[x], batch_size=batch_size, shuffle=False if x != 'train' else shuffle, num_workers=32) for x in data_transforms.keys()}
 
         return dataloaders
     else:
