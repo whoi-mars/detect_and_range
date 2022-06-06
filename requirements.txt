@@ -1,8 +1,11 @@
 h5py
 hdf5storage
 librosa
+resampy
 matplotlib
 numpy
 scipy
 scikit-learn
 tqdm
+torch
+torchvision
