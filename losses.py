@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import warnings
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class SelectiveMSEAndClass(nn.Module):
     
     """
@@ -19,6 +21,7 @@ class SelectiveMSEAndClass(nn.Module):
         self.MSE = nn.MSELoss()
         self.BCE = nn.BCELoss()
         self.alpha = alpha
+        self.log_vars = None # For ease of saving loss state
         
     def forward(self, outputs, r_labels, c_labels):
         
@@ -56,6 +59,7 @@ class SelectiveSSEAndClass(nn.Module):
         self.MSE = nn.MSELoss(reduction='sum')
         self.BCE = nn.BCELoss()
         self.alpha = alpha
+        self.log_vars = None # For ease of saving loss state
         
     def forward(self, outputs, r_labels, c_labels):
         
@@ -87,14 +91,17 @@ class UncertainSelectiveMSEAndClass(nn.Module):
     to learn weights for the classification and ranging tasks. 
     """
     
-    def __init__(self):
+    def __init__(self, log_var_list=None):
         super().__init__()
         self.MSE = nn.MSELoss()
         self.BCE = nn.BCELoss()
 
         # Learned variables for weighting the tasks
-        self.log_vars = [torch.tensor(0., device=device, requires_grad=True), torch.tensor(0., device=device, requires_grad=True)]
-        
+        if log_var_list is None:
+            self.log_vars = [torch.tensor(0., device=device, requires_grad=True), torch.tensor(0., device=device, requires_grad=True)]
+        else:
+            self.log_vars = [torch.tensor(log_var_list[0].item(), device=device, dtype=torch.float32, requires_grad=True), torch.tensor(log_var_list[1].item(), device=device, dtype=torch.float32, requires_grad=True)]
+
     def forward(self, outputs, r_labels, c_labels):
         
         # Isolate ranges for call-containing example only
@@ -113,4 +120,4 @@ class UncertainSelectiveMSEAndClass(nn.Module):
         c_precision = torch.exp(-self.log_vars[1])
         c_loss = c_precision*c_loss + self.log_vars[1]
         
-        return r_loss + c_loss
+        return r_loss + c_loss, r_loss, c_loss
