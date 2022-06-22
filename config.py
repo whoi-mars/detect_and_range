@@ -14,7 +14,7 @@ mat_noise = data_dir + '/noise_only_data_atten.mat'
 
 # Data for model development
 train_data = data_dir + '/grid_data_atten_big_train.h5'
-val_data = data_dir + '/grid_data_atten_big_train.h5'
+val_data = data_dir + '/grid_data_atten_big_val.h5'
 test_data = data_dir + '/grid_data_atten_big_test.h5'
 
 # Collection of gunshot wav files that have been warped
@@ -33,9 +33,9 @@ max_range = 38000 # [m]
 # Minimum range of training data
 min_range = 4000 # [m]
 # Training data mean
-mu = -30.5114 # [dB]
+mu = -30.1798 # [dB]
 # Training data std
-std = 11.9598 # [dB]
+std = 12.0857 # [dB]
 # Trained fs
 fs = 600 # [samples / s]
 # Trained signal window period
@@ -43,6 +43,6 @@ T = 6 # [s]
 # Window size for spectrograms
 nperseg = 62
 # Window overlap for spectrograms
-noverlap = 58
+noverlap = 56
 # Number of frequency bins for spectrograms
 nfft = 463
