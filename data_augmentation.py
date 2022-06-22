@@ -74,13 +74,16 @@ class FrequencyBandZeroing:
         zero_width_f = torch.randint(0, self.max_freq_width, size=(self.num_f,))
         offset_f = torch.randint(0, H - zero_width_f.max(), size=(self.num_f,))
 
-        zero_width_t = torch.randint(0, self.max_t_width, size=(self.num_t,))
-        offset_t = torch.randint(0, W - zero_width_t.max(), size=(self.num_t,))
+        if self.num_t:
+            zero_width_t = torch.randint(0, self.max_t_width, size=(self.num_t,))
+            offset_t = torch.randint(0, W - zero_width_t.max(), size=(self.num_t,))
         
         for wf, of in zip(zero_width_f, offset_f):
             x[:,of:(of + wf),:] = 0
-        for wf, of in zip(zero_width_t, offset_t):
-            x[:,:,of:(of + wf)] = 0
+        
+        if self.num_t:
+            for wf, of in zip(zero_width_t, offset_t):
+                x[:,:,of:(of + wf)] = 0
 
         return x
 
