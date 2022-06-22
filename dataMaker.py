@@ -62,8 +62,8 @@ class DataHandler():
 
         """
         Load data from wav files and saves it in a simmilar .mat format to the KRAKEN simulation output.
-        This function assumes that the .wav files each contain 1 call and are named 'id-range' where 'range'
-        is in kilometers. For example, '4-27_8.wav' for a call with id 4 that has label 27.8 km.
+        This function assumes that the .wav files each contain 1 call and are named 'id-range|class' where 'range'
+        is in kilometers. For example, '4-27_8|1.wav' for a call with id 4 that has label 27.8 km.
         """
         
         # gather names of all wav files in specified path
@@ -85,11 +85,18 @@ class DataHandler():
 
             if calls is None:
                 calls = np.zeros((len(s), num_files))
-                labels = np.zeros((1, num_files))
+                labels = np.zeros((2, num_files))
                 T = len(s) / fs       
 
             calls[:,idx] = s
-            labels[:, idx] = float(f.split('-')[1].split('.')[0].replace('_','.'))*1000
+
+            r, c = f.split('|')
+            c = int(c.split('.')[0])
+            if c:
+                labels[0, idx] = float(r.split('-')[1].replace('_','.'))*1000
+            else:
+                labels[0,idx] = -1
+            labels[1, idx] = c
 
         # Save
         mdic = {u'p_t_r' : calls, u'labels' : labels, u'T' : T, u'fs' : fs}
