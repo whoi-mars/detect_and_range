@@ -140,9 +140,9 @@ class Warped(data.Dataset):
         if self.from_time:
             inputs = to_spect(inputs).squeeze(axis=1).copy()
         inputs = self._from_numpy(inputs)
-        class_targets = 1.
-        range_targets = self._from_numpy(np.asarray(self.inputs['labels'][index]))
-        range_targets = range_targets / self.max_range
+        class_targets = self._from_numpy(np.asarray([self.inputs['labels'][index,1]]))
+        range_targets = self._from_numpy(np.asarray([self.inputs['labels'][index,0]]))
+        range_targets[range_targets != -1] = range_targets / self.max_range
 
         if self.transform is not None:
             inputs = self.transform(inputs)
@@ -238,7 +238,7 @@ def get_image_transforms():
 
     transform_train = transforms.Compose([
         transforms.Normalize([config.mu], [config.std]),
-        FrequencyBandZeroing(max_freq_width=30, max_t_width=30, num_f=1, num_t=6)
+        FrequencyBandZeroing(max_freq_width=30, max_t_width=30, num_f=1, num_t=0)
     ])
 
     transform_dict = {'train': transform_train, 'eval': transform_eval}
