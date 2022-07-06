@@ -2,38 +2,6 @@ import torch
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import numpy as np
-
-
-# def freq_band_zeroing(x, max_freq_width=30, max_t_width=30, num_f, num_t):
-
-#     """
-#     Function to randomly zero-out a band of frequencies
-
-#     Parameters
-#     ----------
-#     x: array-like, input spectrogram.
-#     max_freq_width: int, maximum continuous bandwidth to zero.
-
-#     Returns
-#     -------
-#     x: array-like, spectrogram with zeroed-out frequencies
-#     """
-
-#     if len(x.shape) == 2:
-#         x = x.unsqueeze(0)
-#         C, H, W = x.shape
-#     elif len(x.shape) == 3:
-#         C, H, W = x.shape
-#     else:
-#         raise ValueError(f"x must be shape (H, W) or (C, H, W), is now {len(x.shape)}")
-
-#     for c in range(C):
-#         zero_width = torch.randint(0, max_freq_width, size=(1,))
-#         offset = torch.randint(0, H - zero_width.item(), size=(1,))
-
-#         x[c,offset:(offset + zero_width),:] = 0
-
-#     return x
         
 class FrequencyBandZeroing:
 
@@ -89,4 +57,31 @@ class FrequencyBandZeroing:
 
     def __call__(self, tensor):
         return self.freq_band_zeroing(tensor)
-        
+
+class Normalize1DChannel:
+
+    def __init__(self, mu_list, std_list):
+        self.mu_list = torch.tensor(mu_list, dtype=torch.float32)
+        self.std_list = torch.tensor(std_list, dtype=torch.float32)
+
+    def norm(self, x):
+        return (x - self.mu_list.view(1,-1,1)) / self.std_list.view(1,-1,1)
+
+    def __call__(self, tensor):
+        return self.norm(tensor)
+
+class ZeroOneNorm:
+
+    def __init__(self):
+        pass
+
+    def norm(self, x):
+        return (x - x.min(axis=2).values.view(1,-1,1)) / (x.max(axis=2).values - x.min(axis=2).values).view(1,-1,1)
+
+    def __call__(self, tensor):
+        return self.norm(tensor)
+
+if __name__ == "__main__":
+    z = Normalize1DChannel([2,4], [3,2])
+    a = torch.tensor([[1,2,3],[6,2,9]])
+    print(z(a.unsqueeze(0)))
