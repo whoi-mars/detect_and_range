@@ -2,11 +2,11 @@ import torch
 import torchvision
 from torchvision import transforms
 from torch.utils import data
-from scipy.signal import stft
+from scipy.signal import stft, butter, sosfilt
 import h5py
 import numpy as np
 import os
-from data_augmentation import FrequencyBandZeroing
+from data_augmentation import FrequencyBandZeroing, Normalize1DChannel, ZeroOneNorm
 import config
 
 def to_spect(x):
@@ -56,7 +56,7 @@ class Gunshot(data.Dataset):
     class_targets: int, class labels
     """
 
-    def __init__(self, dir_path, max_range, transform=None, squeeze=False, from_time=True):
+    def __init__(self, dir_path, max_range, transform=None, squeeze=False, from_time=True, hpf=False):
 
         super(Gunshot, self).__init__()
 
@@ -68,10 +68,15 @@ class Gunshot(data.Dataset):
             self.imsize = to_spect([self.inputs['data'][0]]).shape[2:]
         self.max_range = max_range
         self.from_time = from_time
+        self.hpf = hpf
+        if hpf:
+            self.sos = butter(config.order, config.fc, 'highpass', fs=config.fs, output='sos')
 
     def __getitem__(self, index):
         
         inputs = self.inputs['data'][[index]]
+        if self.hpf:
+            inputs = self._hpf(inputs)
         if self.from_time:
             inputs = to_spect(inputs).squeeze(axis=1).copy()
         inputs = self._from_numpy(inputs)
@@ -97,6 +102,9 @@ class Gunshot(data.Dataset):
         file = h5py.File(self.dir_path)
         return dict(data=file['data'][:], labels=file['labels'][:]), file['data'].shape[2:]
 
+    def _hpf(self, tensor):
+        return sosfilt(self.sos, tensor)    
+
 class Warped(data.Dataset):
 
     """
@@ -121,7 +129,7 @@ class Warped(data.Dataset):
     class_targets: int, class labels
     """
 
-    def __init__(self, dir_path, max_range, transform=None, squeeze=False, from_time=True):
+    def __init__(self, dir_path, max_range, transform=None, squeeze=False, from_time=True, hpf=False):
 
         super(Warped, self).__init__()
 
@@ -133,10 +141,15 @@ class Warped(data.Dataset):
             self.imsize = to_spect([self.inputs['data'][0]]).shape[2:]
         self.max_range = max_range
         self.from_time = from_time
+        self.hpf = hpf
+        if hpf:
+            self.sos = butter(config.order, config.fc, 'highpass', fs=config.fs, output='sos')
 
     def __getitem__(self, index):
 
         inputs = self.inputs['data'][[index]]
+        if self.hpf:
+            inputs = self._hpf(inputs)
         if self.from_time:
             inputs = to_spect(inputs).squeeze(axis=1).copy()
         inputs = self._from_numpy(inputs)
@@ -161,6 +174,9 @@ class Warped(data.Dataset):
     def _load_h5_file_with_data(self):
         file = h5py.File(self.dir_path)
         return dict(data=file['data'], labels=file['labels']), file['data'].shape[2:]
+    
+    def _hpf(self, tensor):
+        return sosfilt(self.sos, tensor)
 
 class RandomBatchSampler(data.Sampler):
     """
@@ -233,11 +249,15 @@ def get_image_transforms():
     """
     
     transform_eval = transforms.Compose([
-        transforms.Normalize([config.mu], [config.std]),
+        Normalize1DChannel(config.mu_list_l2, config.std_list_l2),
+        #ZeroOneNorm()
+        #transforms.Normalize([config.mu], [config.std]),
     ])
 
     transform_train = transforms.Compose([
-        transforms.Normalize([config.mu], [config.std]),
+        Normalize1DChannel(config.mu_list_l2, config.std_list_l2),
+        #ZeroOneNorm(),
+        #transforms.Normalize([config.mu], [config.std]),
         FrequencyBandZeroing(max_freq_width=30, max_t_width=30, num_f=1, num_t=0)
     ])
 
@@ -245,7 +265,7 @@ def get_image_transforms():
 
     return transform_dict
 
-def get_dataloaders(data_dir, batch_size, max_range, shuffle=True, transform=None, squeeze=False):
+def get_dataloaders(data_dir, batch_size, max_range, shuffle=True, transform=None, squeeze=False, hpf=False):
     
     """
     Make dictionary of dataloaders for the train, validation, and test sets.
@@ -278,7 +298,7 @@ def get_dataloaders(data_dir, batch_size, max_range, shuffle=True, transform=Non
         }
 
         # Create dataset
-        datasets = {x: Gunshot(dir_path=os.path.join(config.data_dir, 'grid_data_atten_big_{}.h5'.format(x)), max_range=config.max_range, transform=data_transforms[x], squeeze=squeeze) for x in data_transforms.keys()}
+        datasets = {x: Gunshot(dir_path=os.path.join(config.data_dir, 'grid_data_atten_big_{}.h5'.format(x)), max_range=config.max_range, transform=data_transforms[x], squeeze=squeeze, hpf=hpf) for x in data_transforms.keys()}
 
         # Make dataloaders
         dataloaders = {x: data.DataLoader(datasets[x], batch_size=batch_size, shuffle=False if x != 'train' else shuffle, num_workers=32) for x in data_transforms.keys()}
