@@ -1,5 +1,5 @@
 from scipy.io import loadmat, savemat, wavfile
-from scipy.signal import stft, decimate
+from scipy.signal import stft, decimate, butter, sosfilt
 import librosa
 from sklearn.model_selection import train_test_split
 import numpy as np
@@ -10,6 +10,7 @@ from torchvision import transforms
 from resampy import resample
 import h5py
 import hdf5storage
+import config
 import os
 
 class DataHandler():
@@ -156,6 +157,21 @@ class DataHandler():
         fs, s = wavfile.read(path)
 
         return fs, s
+
+    def zeroone(self):
+        self.p_t_noise = (self.p_t_noise - self.p_t_noise.min(axis=0)) / (np.max(self.p_t_noise, axis=0) - np.min(self.p_t_noise, axis=0))
+
+    def halfnorm(self):
+        self.p_t_noise = (self.p_t_noise - self.p_t_noise.min(axis=0)) / (np.max(self.p_t_noise, axis=0) - np.min(self.p_t_noise, axis=0))
+        self.p_t_noise = self.p_t_noise - self.p_t_noise.mean(axis=0)
+
+    def l2norm(self):
+        self.p_t_noise = self.p_t_noise - self.p_t_noise.mean(axis=0)
+        self.p_t_noise = self.p_t_noise / np.sqrt(np.sum(self.p_t_noise ** 2, axis=0))
+
+    def hpf(self, N, fc):
+        sos = butter(N, fc, 'highpass', fs=config.fs, output='sos')
+        self.p_t_noise = sosfilt(sos, self.p_t_noise, axis=0)
 
     def normalize_wav(self):
 
