@@ -54,6 +54,8 @@ parser.add_argument('--freeze_class', action='store_true',
                     help='freezes the parameters associated with the class prediction (default: False)')
 parser.add_argument('--uncertain_loss', action='store_true',
                     help='uses uncertainty loss (default: False)')
+parser.add_argument('--hpf', action='store_true',
+                    help='uses high pass filter on data')
 args = parser.parse_args()
 
 # log in to wandb and initialize
@@ -94,7 +96,8 @@ dl = dataLoader.get_dataloaders(data_dir=config.data_dir,
                                 max_range=config.max_range,
                                 shuffle=True,
                                 transform=dataLoader.get_image_transforms(),
-                                squeeze=True)
+                                squeeze=True,
+                                hpf=args.hpf)
 n_steps_per_epoch = math.ceil(len(dl['train'].dataset) / args.batch_size)
 
 # Create TCN model
@@ -301,7 +304,9 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
                         step_metrics = {"train/train_loss": loss,
                                         "train/range_loss": r_loss,
                                         "train/class_loss": c_loss,
-                                        "train/epoch": (step + 1 + (n_steps_per_epoch * epoch)) / n_steps_per_epoch}
+                                        "train/epoch": (step + 1 + (n_steps_per_epoch * epoch)) / n_steps_per_epoch,
+                                        "train/log_var_0": criterion.log_vars[0],
+                                        "train/log_var_1": criterion.log_vars[1]}
                         if step + 1 < n_steps_per_epoch:
                             wandb.log(step_metrics)
 
@@ -356,7 +361,7 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
         
     # Training done!
     time_elapsed = time.time() - since
-    print('Training completed in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
+    print('Training completed in {:.0f}h {:.0f}m {:.0f}s'.format(time_elapsed // 3600, (time_elapsed // 60) % 60, time_elapsed % 60))
     print('Best val MSE: {:.4f} km^2'.format(best_mse / 1000000))
     print('Best val RMSE: {:.4f} km'.format(torch.sqrt(best_mse) / 1000))
     
