@@ -6,7 +6,7 @@ import os
 import math
 import dataLoader
 import losses
-from tcn import BranchedTCN, TCN
+from tcn import BranchedTCN_CE, BranchedTCN, TCN
 import config
 import argparse
 import wandb
@@ -109,11 +109,12 @@ input_channels = dl['train'].dataset.imsize[0]
 print(f"Spectrogram size: {dl['train'].dataset.imsize}")
 
 # Initialize model
-model = BranchedTCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
+model = BranchedTCN_CE(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
+#model = BranchedTCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
 #model = TCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
 
 # Freeze class parameters
-if isinstance(model, BranchedTCN) and args.freeze_class:
+if isinstance(model, BranchedTCN_CE) and args.freeze_class:
     model.freeze_class()
     print("Class Prediction Weights Frozen")
 
@@ -273,7 +274,7 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
                 # Put data/labels on device
                 inputs = inputs.to(device)
                 r_labels = r_labels.to(device)
-                c_labels = c_labels.to(device)
+                c_labels = c_labels.type(torch.LongTensor).to(device)
                 
                 # Zero out gradient for new batch
                 optimizer.zero_grad()
@@ -294,8 +295,8 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
                 running_loss +=  loss.item() * inputs.size(0)
                 running_c_loss += c_loss.item() * inputs.size(0)
                 running_r_loss += r_loss.item() * inputs.size(0)
-                running_sq_error += ((max_range*r_labels[torch.where((outputs[:,1].squeeze() >= 0.5) & (c_labels.squeeze() == 1))].squeeze() - max_range*outputs[torch.where((outputs[:,1].squeeze() >= 0.5) & (c_labels.squeeze() == 1))[0],0].squeeze()) ** 2).sum().item()      
-                running_corrects += torch.sum((outputs[:,1].squeeze() >= 0.5) == c_labels.squeeze())
+                running_sq_error += ((max_range*r_labels[torch.where((outputs[:,2].squeeze() >= 0.5) & (c_labels.squeeze() == 1))].squeeze() - max_range*outputs[torch.where((outputs[:,2].squeeze() >= 0.5) & (c_labels.squeeze() == 1))[0],0].squeeze()) ** 2).sum().item()      
+                running_corrects += torch.sum((outputs[:,2].squeeze() >= 0.5) == c_labels.squeeze())
                 running_call_count += torch.sum(c_labels.squeeze())
 
                 # Step-dependent wandb updates during training
