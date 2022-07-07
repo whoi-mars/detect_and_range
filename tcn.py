@@ -135,3 +135,31 @@ class BranchedTCN(nn.Module):
         o2 = self.linear2(y1[1][:,:,-1])
         o2 = self.sigmoid(o2)
         return torch.cat((o1, o2), 1)
+
+class BranchedTCN_CE(nn.Module):
+    def __init__(self, input_size, output_size, num_channels, kernel_size, dropout, softmax=False):
+        super(BranchedTCN_CE, self).__init__()
+        if output_size % 2 != 0:
+            raise ValueError("output_size must be divisible by 2.")
+        self.btcn = BranchedTemporalConvNet(input_size, num_channels, kernel_size=kernel_size, dropout=dropout, branch=2)
+        self.linear1 = nn.Linear(num_channels[-1], 1)
+        self.linear2 = nn.Linear(num_channels[-1], output_size)
+
+        self.use_softmax = softmax
+        self.softmax = nn.Softmax(dim=1)
+
+    def freeze_class(self):
+        for param in self.btcn.network.parameters():
+            param.requires_grad = False
+        for param in self.btcn.ends[1].parameters():
+            param.requires_grad = False
+        for param in self.linear2.parameters():
+            param.requires_grad = False
+            
+    def forward(self, inputs):
+        y1 = self.btcn(inputs)
+        o1 = self.linear1(y1[0][:,:,-1])
+        o2 = self.linear2(y1[1][:,:,-1])
+        if self.use_softmax:
+            o2 = self.softmax(o2)
+        return torch.cat((o1, o2), 1)
