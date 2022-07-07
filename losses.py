@@ -94,7 +94,7 @@ class UncertainSelectiveMSEAndClass(nn.Module):
     def __init__(self, log_var_list=None):
         super().__init__()
         self.MSE = nn.MSELoss()
-        self.BCE = nn.BCELoss()
+        self.CE = nn.CrossEntropyLoss()
 
         # Learned variables for weighting the tasks
         if log_var_list is None:
@@ -110,7 +110,7 @@ class UncertainSelectiveMSEAndClass(nn.Module):
         
         # Get loss
         r_loss = self.MSE(call_outs.squeeze(), call_r_labels.squeeze())
-        c_loss = self.BCE(outputs[:,1].squeeze(), c_labels.squeeze())
+        c_loss = self.CE(outputs[:,1:], c_labels.squeeze())
         
         # Calculate weighted range loss
         r_precision = torch.exp(-self.log_vars[0])
