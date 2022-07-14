@@ -138,7 +138,7 @@ if args.start_epoch > 1:
         # Set up uncertainty loss or normal loss from checkpoint
         if args.uncertain_loss:
             # Set up loss function loading learned log_vars
-            criterion = losses.UncertainSelectiveMSEAndClass(checkpoint['log_vars'])
+            criterion = losses.UncertainSelectiveMSEAndClass(device, checkpoint['log_vars'])
             # Set up optimizer
             parameters = ([p for p in model.parameters()] + [criterion.log_vars[0]] + [criterion.log_vars[1]])
         else:
@@ -155,7 +155,7 @@ if args.start_epoch > 1:
 else:
     # Set up uncertainty loss or normal loss from scratch
     if args.uncertain_loss:
-        criterion = losses.UncertainSelectiveMSEAndClass()
+        criterion = losses.UncertainSelectiveMSEAndClass(device)
         parameters = ([p for p in model.parameters()] + [criterion.log_vars[0]] + [criterion.log_vars[1]])
     else:
         criterion = losses.SelectiveMSEAndClass(alpha=args.alpha)
