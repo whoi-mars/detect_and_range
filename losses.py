@@ -12,6 +12,12 @@ class SelectiveMSEAndClass(nn.Module):
     Parameters
     ----------
     alpha: float, weight coefficient for the range loss term.
+
+    Returns
+    -------
+    (r_loss + c_loss): torch.tensor, total loss averaged over the batch.
+    r_loss: torch.tensor, total range loss averaged over the batch.
+    c_loss: torch.tensor, total class loss averaged over the batch.
     """
     
     def __init__(self, alpha=1):
@@ -50,6 +56,12 @@ class SelectiveSSEAndClass(nn.Module):
     Parameters
     ----------
     alpha: float, weight coefficient for the range loss term.
+
+    Returns
+    -------
+    (r_loss + c_loss): torch.tensor, total loss averaged over the batch.
+    r_loss: torch.tensor, total range loss averaged over the batch.
+    c_loss: torch.tensor, total class loss averaged over the batch.
     """
     
     def __init__(self, alpha=1):
@@ -86,7 +98,19 @@ class UncertainSelectiveMSEAndClass(nn.Module):
     predictions for examples of class 1 (with a call in the spectrogram).
 
     This loss also implements the approach from Kendall et al. (https://arxiv.org/abs/1705.07115) 
-    to learn weights for the classification and ranging tasks. 
+    to learn weights for the classification and ranging tasks.
+
+    Parameters
+    ----------
+    device: torch.device, device on which to store log variables.
+    log_var_list: List[torch.tensor], current log variables for resuming training. If 'None', they
+                  will be initialized to zero.
+    
+    Returns
+    -------
+    r_c_loss_m: torch.tensor, total loss averaged over the batch.
+    r_loss_m: torch.tensor, total range loss averaged over the batch.
+    c_loss_m: torch.tensor, total class loss averaged over the batch.
     """
     
     def __init__(self, device, log_var_list=None):
