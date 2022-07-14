@@ -114,22 +114,13 @@ model = BranchedTCN_CE(input_size=input_channels, output_size=n_outputs, num_cha
 #model = TCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
 
 # Freeze class parameters
-if isinstance(model, BranchedTCN_CE) and args.freeze_class:
+if (isinstance(model, BranchedTCN_CE) or isinstance(model, BranchedTCN)) and args.freeze_class:
     model.freeze_class()
     print("Class Prediction Weights Frozen")
 
 # Save directory for modle weights
 save_dir = os.path.join(config.models_dir, args.checkpoint_dir)
 os.makedirs(save_dir, exist_ok=True)
-
-# Create loss and optimizer
-# UNCERTAIN
-# criterion = losses.UncertainSelectiveMSEAndClass()
-# parameters = ([p for p in model.parameters()] + [criterion.log_vars[0]] + [criterion.log_vars[1]])
-# optimizer = torch.optim.Adam(parameters, lr=args.lr)
-# CERTAIN
-# criterion = losses.SelectiveMSEAndClass(alpha=args.alpha)
-# optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
 # Load weights to start training at start epoch
 if args.start_epoch > 1:
@@ -155,6 +146,7 @@ if args.start_epoch > 1:
             parameters = model.parameters()
         # Create optimizer
         optimizer = torch.optim.Adam(parameters, lr=args.lr)
+
         # Load optimizer and model states
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -170,6 +162,7 @@ else:
         parameters = model.parameters()
     # Set up optimizer
     optimizer = torch.optim.Adam(parameters, lr=args.lr)
+
 
 if args.data_parallel:
     model = torch.nn.DataParallel(model)
@@ -233,7 +226,6 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
     train_rmse_history = []
     train_acc_history = []
     
-    
     # Initialize best model
     best_model_wts = copy.deepcopy(get_model_state_dict(model))
     best_opt_state = copy.deepcopy(optimizer.state_dict())
@@ -273,8 +265,8 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
                 
                 # Put data/labels on device
                 inputs = inputs.to(device)
-                r_labels = r_labels.to(device)
-                c_labels = c_labels.type(torch.LongTensor).to(device)
+                r_labels = r_labels.squeeze().to(device)
+                c_labels = c_labels.squeeze().to(device)
                 
                 # Zero out gradient for new batch
                 optimizer.zero_grad()
@@ -291,12 +283,12 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
                         loss.backward()
                         optimizer.step()
                 
-                # Update running statistics -- sq_error only accumulated for examples with calls
-                running_loss +=  loss.item() * inputs.size(0)
+                # Update running statistics -- sq_error only accumulated for examples identified with calls
+                running_loss += loss.item() * inputs.size(0)
                 running_c_loss += c_loss.item() * inputs.size(0)
                 running_r_loss += r_loss.item() * inputs.size(0)
-                running_sq_error += ((max_range*r_labels[torch.where((outputs[:,2].squeeze() >= 0.5) & (c_labels.squeeze() == 1))].squeeze() - max_range*outputs[torch.where((outputs[:,2].squeeze() >= 0.5) & (c_labels.squeeze() == 1))[0],0].squeeze()) ** 2).sum().item()      
-                running_corrects += torch.sum((outputs[:,2].squeeze() >= 0.5) == c_labels.squeeze())
+                running_sq_error += ((max_range*r_labels[torch.where((torch.nn.functional.softmax(outputs[:,1:],dim=1)[:,1].squeeze() >= 0.5) & (c_labels.squeeze() == 1))].squeeze() - max_range*outputs[torch.where((torch.nn.functional.softmax(outputs[:,1:],dim=1)[:,1].squeeze() >= 0.5) & (c_labels.squeeze() == 1))[0],0].squeeze()) ** 2).sum().item()      
+                running_corrects += torch.sum((torch.nn.functional.softmax(outputs[:,1:],dim=1)[:,1].squeeze() >= 0.5) == c_labels.squeeze())
                 running_call_count += torch.sum(c_labels.squeeze())
 
                 # Step-dependent wandb updates during training
