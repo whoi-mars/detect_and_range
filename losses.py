@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import warnings
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 class SelectiveMSEAndClass(nn.Module):
     
     """
@@ -79,7 +77,7 @@ class SelectiveSSEAndClass(nn.Module):
             r_loss = self.alpha*self.MSE(call_outs.squeeze(), call_r_labels.squeeze())
 
         return r_loss + c_loss, r_loss, c_loss
-    
+
 class UncertainSelectiveMSEAndClass(nn.Module):
     
     """
@@ -91,10 +89,9 @@ class UncertainSelectiveMSEAndClass(nn.Module):
     to learn weights for the classification and ranging tasks. 
     """
     
-    def __init__(self, log_var_list=None):
+    def __init__(self, device, log_var_list=None):
         super().__init__()
-        self.MSE = nn.MSELoss()
-        self.CE = nn.CrossEntropyLoss()
+        self.MSE = nn.MSELoss(reduction='none')
 
         # Learned variables for weighting the tasks
         if log_var_list is None:
@@ -103,21 +100,32 @@ class UncertainSelectiveMSEAndClass(nn.Module):
             self.log_vars = [torch.tensor(log_var_list[0].item(), device=device, dtype=torch.float32, requires_grad=True), torch.tensor(log_var_list[1].item(), device=device, dtype=torch.float32, requires_grad=True)]
 
     def forward(self, outputs, r_labels, c_labels):
-        
+
         # Isolate ranges for call-containing example only
         call_outs = outputs[c_labels.squeeze() == 1, 0]
         call_r_labels = r_labels[c_labels.squeeze() == 1]
-        
-        # Get loss
+
+        # Get classification loss
+        c_loss = torch.exp(-self.log_vars[1])*outputs[torch.arange(len(outputs),dtype=torch.long), (c_labels.squeeze()+1).long()] - torch.log(torch.sum(torch.exp(torch.exp(-self.log_vars[1])*outputs[:,1:]),dim=1))
+    
+        # Calculate range loss
         r_loss = self.MSE(call_outs.squeeze(), call_r_labels.squeeze())
-        c_loss = self.CE(outputs[:,1:], c_labels.squeeze())
-        
-        # Calculate weighted range loss
         r_precision = torch.exp(-self.log_vars[0])
-        r_loss = r_precision*r_loss + self.log_vars[0]
+        r_loss = 0.5*(r_precision*r_loss + self.log_vars[0])
+        r_loss_final = torch.zeros_like(c_loss) 
+        r_loss_final[c_labels.squeeze() == 1] = r_loss
+
+        # Get means
+        r_loss_m = r_loss_final.mean()
+        c_loss_m = (-1*c_loss).mean()
+        r_c_loss_m = (r_loss_final - c_loss).mean()
         
-        # Calculate weighted class loss
-        c_precision = torch.exp(-self.log_vars[1])
-        c_loss = c_precision*c_loss + self.log_vars[1]
-        
-        return r_loss + c_loss, r_loss, c_loss
+        return r_c_loss_m, r_loss_m, c_loss_m
+
+if __name__ == "__main__":
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    l = UncertainSelectiveMSEAndClass(device)
+    outputs = torch.tensor([[0.54, 0.01, 0.99], [0.23, 1.33, 0.12], [0.97, 0.7, 0.3], [0.129, 0.3, 0.7], [0.23, 0.87, 0.13]]).to(device)
+    r_l = torch.tensor([[0.53, 0.65, 0.7, 0.1, 0.1]]).T.to(device)
+    c_l = torch.tensor([[1, 0, 1, 0, 1]]).T.to(device)
+    print(l(outputs, r_l, c_l))
