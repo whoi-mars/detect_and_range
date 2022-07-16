@@ -93,7 +93,7 @@ class SelectiveSSEAndClass(nn.Module):
 class UncertainSelectiveMSEAndClass(nn.Module):
     
     """
-    Class for loss which adds binary cross entropy loss and MSE loss
+    Class for loss which adds cross entropy loss and MSE loss
     for range predictions. The MSE loss only penalizes incorrect range
     predictions for examples of class 1 (with a call in the spectrogram).
 
@@ -149,17 +149,31 @@ class UncertainSelectiveMSEAndClass(nn.Module):
 class UncertainSelectiveMSEAndClassApprox(nn.Module):
     
     """
-    Class for loss which adds binary cross entropy loss and MSE loss
+    Class for loss which adds cross entropy loss and MSE loss
     for range predictions. The MSE loss only penalizes incorrect range
     predictions for examples of class 1 (with a call in the spectrogram).
+    This function implements the approximation.
+
     This loss also implements the approach from Kendall et al. (https://arxiv.org/abs/1705.07115) 
-    to learn weights for the classification and ranging tasks. 
+    to learn weights for the classification and ranging tasks.
+
+    Parameters
+    ----------
+    device: torch.device, device on which to store log variables.
+    log_var_list: List[torch.tensor], current log variables for resuming training. If 'None', they
+                  will be initialized to zero.
+    
+    Returns
+    -------
+    r_c_loss_m: torch.tensor, total loss averaged over the batch.
+    r_loss_m: torch.tensor, total range loss averaged over the batch.
+    c_loss_m: torch.tensor, total class loss averaged over the batch.
     """
     
     def __init__(self, device, log_var_list=None):
         super().__init__()
         self.MSE = nn.MSELoss(reduction='none')
-        # self.CE = nn.CrossEntropyLoss(reduction='none')
+        #self.CE = nn.CrossEntropyLoss(reduction='none')
 
         # Learned variables for weighting the tasks
         if log_var_list is None:
@@ -172,7 +186,9 @@ class UncertainSelectiveMSEAndClassApprox(nn.Module):
         # Get loss
         sm = torch.nn.functional.softmax(outputs[:,1:],dim=1)
         c_loss = -torch.log(sm[torch.arange(len(sm),dtype=torch.long), c_labels.squeeze().long()])
-        # c_loss2 = self.CE(outputs[:,1:], c_labels.squeeze())
+        #print(c_loss)
+        #c_loss2 = self.CE(outputs[:,1:], c_labels.squeeze())
+        #print(c_loss2)
         
         # Calculate weighted class loss
         c_loss = torch.exp(-self.log_vars[1])*c_loss + 0.5*self.log_vars[1]
@@ -196,7 +212,7 @@ class UncertainSelectiveMSEAndClassApprox(nn.Module):
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    l = UncertainSelectiveMSEAndClass(device)
+    l = UncertainSelectiveMSEAndClassApprox(device)
     outputs = torch.tensor([[0.54, 0.01, 0.99], [0.23, 1.33, 0.12], [0.97, 0.7, 0.3], [0.129, 0.3, 0.7], [0.23, 0.87, 0.13]]).to(device)
     r_l = torch.tensor([[0.53, 0.65, 0.7, 0.1, 0.1]]).T.to(device)
     c_l = torch.tensor([[1, 0, 1, 0, 1]]).T.to(device)
