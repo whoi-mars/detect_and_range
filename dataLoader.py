@@ -8,6 +8,7 @@ import numpy as np
 import os
 from data_augmentation import FrequencyBandZeroing, Normalize1DChannel, ZeroOneNorm
 import config
+import warnings
 
 def to_spect(x):
 
@@ -82,6 +83,7 @@ class Gunshot(data.Dataset):
         inputs = self._from_numpy(inputs)
         class_targets = self._from_numpy(np.asarray([self.inputs['labels'][index,4]]))
         range_targets = self._from_numpy(np.asarray([self.inputs['labels'][index,0]]))
+        #snr_vals = self._from_numpy(np.asarray([self.inputs['labels'][index,5]]))
         range_targets[range_targets != -1] = range_targets / self.max_range
 
         if self.transform is not None:
@@ -90,7 +92,7 @@ class Gunshot(data.Dataset):
         if self.squeeze:
             inputs = inputs.squeeze()
 
-        return inputs, range_targets, class_targets
+        return inputs, range_targets, class_targets #, snr_vals
 
     def __len__(self):
         return self.inputs['data'].shape[0]
@@ -178,6 +180,90 @@ class Warped(data.Dataset):
     def _hpf(self, tensor):
         return sosfilt(self.sos, tensor)
 
+def get_image_transforms():
+    
+    """
+    Make dictionary of transforms for sets used for training/evaluation
+    
+    Returns
+    -------
+    transforms: dict, transforms for training/evaluation datasets
+    """
+    
+    transform_eval = transforms.Compose([
+        Normalize1DChannel(config.mu_list_l2, config.std_list_l2),
+    ])
+
+    transform_train = transforms.Compose([
+        Normalize1DChannel(config.mu_list_l2, config.std_list_l2),
+        FrequencyBandZeroing(max_freq_width=30, max_t_width=30, num_f=1, num_t=0)
+    ])
+
+    transform_dict = {'train': transform_train, 'eval': transform_eval}
+
+    return transform_dict
+
+def get_dataloaders(data_dir, batch_size, max_range, shuffle=True, transform=None, squeeze=False, hpf=False):
+    
+    """
+    Make dictionary of dataloaders for the train, validation, and test sets.
+    
+    Parameters
+    ----------
+    data_dir: str, directory that contains the data .h5 files
+    batch_size: int, numbere of examples per batch
+    shuffle: bool, whether or not to shuffle the training set
+    transform: dict, dictionary of transforms with keys 'train' and 'eval'
+    
+    Returns
+    -------
+    dataloaders: dict, dictionary with data loaders for each dataset
+    """
+    
+    # Get the similar parts of the train/validation/test file names
+    name_base_train = "_".join((config.train_data.split('/')[-1].split('_')[:-1])) + "_"
+    name_base_val = "_".join((config.val_data.split('/')[-1].split('_')[:-1])) + "_"
+    name_base_test = "_".join((config.test_data.split('/')[-1].split('_')[:-1])) + "_"
+    
+    base_list = [name_base_train, name_base_val, name_base_test]
+    
+    if all(base == base_list[0] for base in base_list):
+        # Transform dictionary
+        data_transforms = {
+            'train': transform['train'] if transform is not None else transform,
+            'val': transform['eval'] if transform is not None else transform,
+            'test': transform['eval'] if transform is not None else transform
+        }
+
+        # Create dataset
+        datasets = {x: Gunshot(dir_path=os.path.join(config.data_dir, 'grid_data_atten_big_{}.h5'.format(x)), max_range=config.max_range, transform=data_transforms[x], squeeze=squeeze, hpf=hpf) for x in data_transforms.keys()}
+
+        # Make dataloaders
+        dataloaders = {x: data.DataLoader(datasets[x], batch_size=batch_size, shuffle=False if x != 'train' else shuffle, num_workers=32) for x in data_transforms.keys()}
+
+        return dataloaders
+    else:
+        warnings.warn("According to their names, the data sets you are using to train appear to be inconsistent")
+
+def load_h5(path):
+
+    """
+    Loads spectrogram data and labels saved in an h5 format.
+    Parameters
+    ----------
+    path: str, path where the h5 file is saved.
+    Returns
+    ----------
+    X: array-like, calculated spectrograms of shape (n_examples, Zxx.shape[0], Zxx.shape[1]).
+    y: array-like, labels of shape (n_labels, n_examples).
+    """
+
+    with h5py.File(path, 'r') as f:
+        X = f["data"][:]
+        y = f["labels"][:]
+
+    return X, y
+
 class RandomBatchSampler(data.Sampler):
     """
     Sampling class to create random sequential batches from a given dataset
@@ -237,91 +323,3 @@ def fast_loader(dataset, batch_size=32, drop_last=False, transforms=None):
         dataset, batch_size=None,  # must be disabled when using samplers
         sampler=data.BatchSampler(RandomBatchSampler(dataset, batch_size), batch_size=batch_size, drop_last=drop_last)
     )
-
-def get_image_transforms():
-    
-    """
-    Make dictionary of transforms for sets used for training/evaluation
-    
-    Returns
-    -------
-    transforms: dict, transforms for training/evaluation datasets
-    """
-    
-    transform_eval = transforms.Compose([
-        Normalize1DChannel(config.mu_list_l2, config.std_list_l2),
-        #ZeroOneNorm()
-        #transforms.Normalize([config.mu], [config.std]),
-    ])
-
-    transform_train = transforms.Compose([
-        Normalize1DChannel(config.mu_list_l2, config.std_list_l2),
-        #ZeroOneNorm(),
-        #transforms.Normalize([config.mu], [config.std]),
-        FrequencyBandZeroing(max_freq_width=30, max_t_width=30, num_f=1, num_t=0)
-    ])
-
-    transform_dict = {'train': transform_train, 'eval': transform_eval}
-
-    return transform_dict
-
-def get_dataloaders(data_dir, batch_size, max_range, shuffle=True, transform=None, squeeze=False, hpf=False):
-    
-    """
-    Make dictionary of dataloaders for the train, validation, and test sets.
-    
-    Parameters
-    ----------
-    data_dir: str, directory that contains the data .h5 files
-    batch_size: int, numbere of examples per batch
-    shuffle: bool, whether or not to shuffle the training set
-    transform: dict, dictionary of transforms with keys 'train' and 'eval'
-    
-    Returns
-    -------
-    dataloaders: dict, dictionary with data loaders for each dataset
-    """
-    
-    # Get the similar parts of the train/validation/test file names
-    name_base_train = "_".join((config.train_data.split('/')[-1].split('_')[:-1])) + "_"
-    name_base_val = "_".join((config.val_data.split('/')[-1].split('_')[:-1])) + "_"
-    name_base_test = "_".join((config.test_data.split('/')[-1].split('_')[:-1])) + "_"
-    
-    base_list = [name_base_train, name_base_val, name_base_test]
-    
-    if all(base == base_list[0] for base in base_list):
-        # Transform dictionary
-        data_transforms = {
-            'train': transform['train'] if transform is not None else transform,
-            'val': transform['eval'] if transform is not None else transform,
-            'test': transform['eval'] if transform is not None else transform
-        }
-
-        # Create dataset
-        datasets = {x: Gunshot(dir_path=os.path.join(config.data_dir, 'grid_data_atten_big_{}.h5'.format(x)), max_range=config.max_range, transform=data_transforms[x], squeeze=squeeze, hpf=hpf) for x in data_transforms.keys()}
-
-        # Make dataloaders
-        dataloaders = {x: data.DataLoader(datasets[x], batch_size=batch_size, shuffle=False if x != 'train' else shuffle, num_workers=32) for x in data_transforms.keys()}
-
-        return dataloaders
-    else:
-        raise ValueError("According to their names, the data sets you are using to train appear to be inconsistent")
-
-def load_h5(path):
-
-    """
-    Loads spectrogram data and labels saved in an h5 format.
-    Parameters
-    ----------
-    path: str, path where the h5 file is saved.
-    Returns
-    ----------
-    X: array-like, calculated spectrograms of shape (n_examples, Zxx.shape[0], Zxx.shape[1]).
-    y: array-like, labels of shape (n_labels, n_examples).
-    """
-
-    with h5py.File(path, 'r') as f:
-        X = f["data"][:]
-        y = f["labels"][:]
-
-    return X, y
