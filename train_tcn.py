@@ -6,7 +6,7 @@ import os
 import math
 import dataLoader
 import losses
-from tcn import BranchedTCN_CE, BranchedTCN, TCN
+from tcn import BranchedTCN_CE
 import config
 import argparse
 import wandb
