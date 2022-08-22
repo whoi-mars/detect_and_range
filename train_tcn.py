@@ -1,15 +1,18 @@
-import torch
-from tqdm import tqdm
 import time
 import copy
 import os
 import math
-import dataLoader
-import losses
-from tcn import BranchedTCN_CE
-import config
 import argparse
+
+from tqdm import tqdm
+import torch
 import wandb
+
+import datasets.dataLoader as dataLoader
+import losses.losses as losses
+from models.tcn import BranchedTCN_CE
+
+import config
 
 parser = argparse.ArgumentParser(description="TCN Training on KRAKEN Synthetic Data")
 parser.add_argument('--batch_size', type=int, default=128, metavar='N',
