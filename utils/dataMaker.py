@@ -26,7 +26,7 @@ class DataHandler():
     Attributes
     ----------
     p_t_noise: array-like, constains time-domain simulated calls from KRAKEN. Of shape (n_samples_per_example, n_examples).
-    labels: array-like, labels for range, cb, cw, and zs. Of shape (n_labels, n_examples).
+    labels: array-like, labels for range, cb, cw, and zs, class, and SNR. Of shape (n_labels, n_examples).
     t_dec_min: array-like, time at which the dispersed acoustic signal ends. Of shape (n_examples,).
     t_dec_max: array-like, time at which the dispersed acoutic signal begins. Of shape (n_examples,).
     fs: float, sampling frequencey used in KRAKEN simulation.
@@ -163,28 +163,14 @@ class DataHandler():
 
         return fs, s
 
-    def zeroone(self):
-        self.p_t_noise = (self.p_t_noise - self.p_t_noise.min(axis=0)) / (np.max(self.p_t_noise, axis=0) - np.min(self.p_t_noise, axis=0))
-
-    def halfnorm(self):
-        self.p_t_noise = (self.p_t_noise - self.p_t_noise.min(axis=0)) / (np.max(self.p_t_noise, axis=0) - np.min(self.p_t_noise, axis=0))
-        self.p_t_noise = self.p_t_noise - self.p_t_noise.mean(axis=0)
-
     def l2norm(self):
+
+        """
+        Mean-centers and L2 normalizes the time-domain signals.
+        """
+
         self.p_t_noise = self.p_t_noise - self.p_t_noise.mean(axis=0)
         self.p_t_noise = self.p_t_noise / np.sqrt(np.sum(self.p_t_noise ** 2, axis=0))
-
-    def hpf(self, N, fc):
-        sos = butter(N, fc, 'highpass', fs=config.fs, output='sos')
-        self.p_t_noise = sosfilt(sos, self.p_t_noise, axis=0)
-
-    def normalize_wav(self):
-
-        """
-        Normalize the time-domain signal to have 0 mean and 1 variance.
-        """
-
-        self.p_t_noise = (self.p_t_noise - self.p_t_noise.mean(axis=0)) / self.p_t_noise.std(axis=0)
 
     def create_signals(self, rand_shift=False, verbose=False):
 
@@ -213,6 +199,7 @@ class DataHandler():
             elif rand_shift and not self.labels[4,sig]:
                 self.p_t_noise[:,sig] = self.__wrap_signal_random(self.p_t_noise[:,sig])
 
+        # Transpose signals and labels
         self.y = self.labels.T.astype('float32')
         self.X = self.p_t_noise.T
 

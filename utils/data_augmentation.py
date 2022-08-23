@@ -60,23 +60,26 @@ class FrequencyBandZeroing:
 
 class Normalize1DChannel:
 
+    """
+    Normalize each frequency bin of a spectrogram by mean-centering and
+    dividing by standard deviation.
+
+    Parameters
+    ----------
+    mu_list: array-like, mean values for each frequency bin
+    std_list: array_like, std values for each frequency bin
+
+    Returns
+    -------
+    array-like, normalized version of input spectrogram (per frequency bin)
+    """
+
     def __init__(self, mu_list, std_list):
         self.mu_list = torch.tensor(mu_list, dtype=torch.float32)
         self.std_list = torch.tensor(std_list, dtype=torch.float32)
 
     def norm(self, x):
         return (x - self.mu_list.view(1,-1,1)) / self.std_list.view(1,-1,1)
-
-    def __call__(self, tensor):
-        return self.norm(tensor)
-
-class ZeroOneNorm:
-
-    def __init__(self):
-        pass
-
-    def norm(self, x):
-        return (x - x.min(axis=2).values.view(1,-1,1)) / (x.max(axis=2).values - x.min(axis=2).values).view(1,-1,1)
 
     def __call__(self, tensor):
         return self.norm(tensor)
