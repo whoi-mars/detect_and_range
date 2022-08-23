@@ -113,8 +113,6 @@ print(f"Spectrogram size: {dl['train'].dataset.imsize}")
 
 # Initialize model
 model = BranchedTCN_CE(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
-#model = BranchedTCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
-#model = TCN(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
 
 # Freeze class parameters
 if (isinstance(model, BranchedTCN_CE) or isinstance(model, BranchedTCN)) and args.freeze_class:
