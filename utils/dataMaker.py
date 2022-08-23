@@ -322,7 +322,7 @@ class DataHandler():
             f.create_dataset("data", data=self.X)
             f.create_dataset("labels", data=self.y)
 
-    def save_split_h5(self, train_path, val_path, test_path=None, val_size=None, test_size=None, train_size=None, random_state=None, shuffle=True, stratify=None):
+    def save_split_h5(self, train_path, val_path, test_path=None, val_size=0.2, test_size=0, train_size=0.8, random_state=None, shuffle=True, stratify=None):
         
         """
         Save data and labels in h5 format and split into train, validation, and test set.
@@ -358,11 +358,12 @@ class DataHandler():
         print("Splitting Data...")
         # Train/val split
         inds = np.arange(self.X.shape[0])
-        X_train, X_val, y_train, y_val = train_test_split(inds, inds, test_size=val_size, train_size=train_size, random_state=random_state, shuffle=shuffle, stratify=stratify)
+        X_train, X_val, y_train, y_val = train_test_split(inds, inds, test_size=val_size, train_size=train_size+test_size, random_state=random_state, shuffle=shuffle, stratify=stratify)
         
         # Test split from training data
-        if test_size is not None:
-            test_size = test_size / train_size
+        if test_size != 0:
+            test_size = test_size / (train_size + test_size)
+            train_size = train_size / (train_size + test_size)
             X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=test_size, train_size=train_size, random_state=random_state, shuffle=shuffle, stratify=stratify)
 
         # Chunk size to use when saving data to .h5 file in batches
