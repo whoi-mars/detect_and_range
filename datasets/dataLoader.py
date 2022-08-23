@@ -10,7 +10,7 @@ import numpy as np
 import h5py
 import warnings
 
-from utils.data_augmentation import FrequencyBandZeroing, Normalize1DChannel, ZeroOneNorm
+from utils.data_augmentation import FrequencyBandZeroing, Normalize1DChannel
 import config
 
 class Gunshot(data.Dataset):
