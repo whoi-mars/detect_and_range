@@ -101,12 +101,21 @@ std_list_l2 = [12.9516, 12.2401, 11.8758, 11.6709, 11.5602, 11.5036, 11.4859, 11
 fs = 600 # [samples / s]
 # Trained signal window period
 T = 6 # [s]
+
+##################################################################
+#                     Spectrogram Parameters                     #
+##################################################################
+
 # Window size for spectrograms
 nperseg = 62
 # Window overlap for spectrograms
 noverlap = 56
 # Number of frequency bins for spectrograms
 nfft = 463
-# High pass filter parameters
+
+##################################################################
+#                  High-Pass Filter (If Using)                   #
+##################################################################
+
 order = 3
 fc = 50 # [Hz]
