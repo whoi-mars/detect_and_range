@@ -173,7 +173,6 @@ class UncertainSelectiveMSEAndClassApprox(nn.Module):
     def __init__(self, device, log_var_list=None):
         super().__init__()
         self.MSE = nn.MSELoss(reduction='none')
-        #self.CE = nn.CrossEntropyLoss(reduction='none')
 
         # Learned variables for weighting the tasks
         if log_var_list is None:
@@ -186,9 +185,6 @@ class UncertainSelectiveMSEAndClassApprox(nn.Module):
         # Get loss
         sm = torch.nn.functional.softmax(outputs[:,1:],dim=1)
         c_loss = -torch.log(sm[torch.arange(len(sm),dtype=torch.long), c_labels.squeeze().long()])
-        #print(c_loss)
-        #c_loss2 = self.CE(outputs[:,1:], c_labels.squeeze())
-        #print(c_loss2)
         
         # Calculate weighted class loss
         c_loss = torch.exp(-self.log_vars[1])*c_loss + 0.5*self.log_vars[1]
