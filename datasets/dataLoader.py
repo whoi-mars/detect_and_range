@@ -204,11 +204,11 @@ def get_image_transforms():
     """
     
     transform_eval = transforms.Compose([
-        Normalize1DChannel(config.mu_list_l2, config.std_list_l2),
+        Normalize1DChannel(config.mu_list, config.std_list),
     ])
 
     transform_train = transforms.Compose([
-        Normalize1DChannel(config.mu_list_l2, config.std_list_l2),
+        Normalize1DChannel(config.mu_list, config.std_list),
         FrequencyBandZeroing(max_freq_width=30, max_t_width=30, num_f=1, num_t=0)
     ])
 
