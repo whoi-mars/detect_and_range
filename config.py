@@ -11,11 +11,13 @@ models_dir = data_dir + '/models'
 # Data from MATLAB simulation
 mat_data = data_dir + '/grid_data_atten.mat'
 mat_noise = data_dir + '/noise_only_data_atten.mat'
+sample_noise_mat = data_dir + '/noise_collect_6_ccb_v7.mat'
 
 # Data for model development
 train_data = data_dir + '/grid_data_atten_big_train.h5'
 val_data = data_dir + '/grid_data_atten_big_val.h5'
 test_data = data_dir + '/grid_data_atten_big_test.h5'
+sample_noise = data_dir + '/samp_noise.h5'
 
 # Collection of gunshot wav files that have been warped
 warped_dir = data_dir + '/warped_calls_D72_cb1461'
