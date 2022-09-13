@@ -33,7 +33,7 @@ class DataHandler():
     T: float, duration of KRAKEN simulation for an example.
     """
 
-    def __init__(self, path, noise_only_path=None, data_dir=None, mode='mat', fs_desired=None):
+    def __init__(self, path, noise_only_path=None, sampled_noise_path=None, data_dir=None, mode='mat', fs_desired=None):
 
         """
         Initialize attributes relevant to KRAKEN simulation.
@@ -58,6 +58,8 @@ class DataHandler():
         self.__path = path
         self.__data_dir = data_dir
         self.__noise_only_path = noise_only_path
+        self.__sampled_noise_path = sampled_noise_path
+        self.__l2norm = False
 
         # Load data
         if mode == 'wav':
@@ -163,14 +165,49 @@ class DataHandler():
 
         return fs, s
 
-    def l2norm(self):
+    def __load_sampled_noise(self, n):
+        
+        # load noise
+        mat_samp_noise = h5py.File(config.sample_noise, 'r')
+        samp_noise = mat_samp_noise['data'][:]
+        
+        # get random indices
+        inds = np.random.randint(0, samp_noise.shape[0], n)
+
+        return samp_noise[inds,...]
+
+    def save_sampled_noise(self):
+
+        # Load KRAKEN simulation data/.mat file from wav files
+        mat_samp_noise = h5py.File(self.__sampled_noise_path, 'r')
+        samp_noise = mat_samp_noise['noise_from_data'][:].T
+        fs = float(np.squeeze(mat_samp_noise['fs'][:]))
+
+        # mean center
+        samp_noise = samp_noise - samp_noise.mean(axis=0)
+
+        # resample
+        samp_noise = resample(samp_noise, fs, self.fs_desired, axis=0)
+
+        # save
+        with h5py.File(config.sample_noise, "w") as f:
+            dset = f.create_dataset("data", data=samp_noise.T, chunks=(1,len(samp_noise[:,0])))
+
+    def l2norm(self, x=None):
 
         """
         Mean-centers and L2 normalizes the time-domain signals.
         """
+        if x is not None:
+            x_mean = x.mean(axis=1)[:,np.newaxis]
+            x = x - x_mean
+            x = x / (np.sqrt(np.sum(x ** 2, axis=1))[:,np.newaxis])
+            return x
+        else:
+            self.p_t_noise = self.p_t_noise - self.p_t_noise.mean(axis=0)
+            self.p_t_noise = self.p_t_noise / np.sqrt(np.sum(self.p_t_noise ** 2, axis=0))
 
-        self.p_t_noise = self.p_t_noise - self.p_t_noise.mean(axis=0)
-        self.p_t_noise = self.p_t_noise / np.sqrt(np.sum(self.p_t_noise ** 2, axis=0))
+            self.__l2norm = True
 
     def create_signals(self, rand_shift=False, verbose=False):
 
@@ -354,7 +391,7 @@ class DataHandler():
             X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=test_size, train_size=train_size, random_state=random_state, shuffle=shuffle, stratify=stratify)
 
         # Chunk size to use when saving data to .h5 file in batches
-        c = 10000
+        c = 2000
 
         print("Saving Training Data...")
         remain = (self.X[X_train].shape[0] % c)
@@ -362,7 +399,7 @@ class DataHandler():
         with h5py.File(train_path, 'a') as f:
             i = 0
             f.create_dataset("data", data=self.X[X_train][:i+c,...], chunks=chunks, maxshape=maxshape)
-            f.create_dataset("labels", data=self.y[y_train][:i+c,...], chunks=(1,5), maxshape=(None,5))
+            f.create_dataset("labels", data=self.y[y_train][:i+c,...], chunks=(1,6), maxshape=(None,6))
             i += c
             while True:
                 if i == top:
@@ -383,51 +420,67 @@ class DataHandler():
 
         if test_size is not None:
             print("Saving Test Data...")
-            remain = (self.X[X_test].shape[0] % c)
-            top = self.X[X_test].shape[0] - remain
+            test_noise = self.__load_sampled_noise(len(X_test))
+            if self.__l2norm:
+                test_noise = self.l2norm(test_noise)
+            test_noise_labels = -1*np.ones((test_noise.shape[0], 6))
+            test_noise_labels[:,4] = 0
+            X_test_noise = np.concatenate((self.X[X_test], test_noise), axis=0)
+            y_test_noise = np.concatenate((self.y[y_test], test_noise_labels), axis=0)
+            remain = (X_test_noise.shape[0] % c)
+            top = X_test_noise.shape[0] - remain
             with h5py.File(test_path, 'a') as f:
                 i = 0
-                f.create_dataset("data", data=self.X[X_test][:i+c,...], chunks=chunks, maxshape=maxshape)
-                f.create_dataset("labels", data=self.y[y_test][:i+c,...], chunks=(1,5), maxshape=(None,5))
+                f.create_dataset("data", data=X_test_noise[:i+c,...], chunks=chunks, maxshape=maxshape)
+                f.create_dataset("labels", data=y_test_noise[:i+c,...], chunks=(1,6), maxshape=(None,6))
                 i += c
                 while True:
                     if i == top:
                         f["data"].resize((f["data"].shape[0] + remain), axis=0)
-                        f["data"][i:,...] = self.X[X_test][i:,...]
+                        f["data"][i:,...] = X_test_noise[i:,...]
 
                         f["labels"].resize((f["labels"].shape[0] + remain), axis=0)
-                        f["labels"][i:,...] = self.y[y_test][i:,...]
+                        f["labels"][i:,...] = y_test_noise[i:,...]
                         break
                     else:
                         f["data"].resize((f["data"].shape[0] + c), axis=0)
-                        f["data"][i:i+c,...] = self.X[X_test][i:i+c,...]
+                        f["data"][i:i+c,...] = X_test_noise[i:i+c,...]
 
                         f["labels"].resize((f["labels"].shape[0] + c), axis=0)
-                        f["labels"][i:i+c,...] = self.y[y_test][i:i+c,...]
+                        f["labels"][i:i+c,...] = y_test_noise[i:i+c,...]
                     i += c
                     print(f["data"].shape)
 
         print("Saving Validation Data")
         remain = (self.X[X_val].shape[0] % c)
         top = self.X[X_val].shape[0] - remain
+        val_noise = self.__load_sampled_noise(len(X_val))
+        if self.__l2norm:
+            val_noise = self.l2norm(val_noise)
+        val_noise_labels = -1*np.ones((val_noise.shape[0], 6))
+        val_noise_labels[:,4] = 0
+        X_val_noise = np.concatenate((self.X[X_val], val_noise), axis=0)
+        y_val_noise = np.concatenate((self.y[y_val], val_noise_labels), axis=0)
+        remain = (y_test_noise.shape[0] % c)
+        top = y_test_noise.shape[0] - remain
         with h5py.File(val_path, 'a') as f:
             i = 0
-            f.create_dataset("data", data=self.X[X_val][:i+c,...], chunks=chunks, maxshape=maxshape)
-            f.create_dataset("labels", data=self.y[y_val][:i+c,...], chunks=(1,5), maxshape=(None,5))
+            f.create_dataset("data", data=X_val_noise[:i+c,...], chunks=chunks, maxshape=maxshape)
+            f.create_dataset("labels", data=y_val_noise[:i+c,...], chunks=(1,6), maxshape=(None,6))
             i += c
             while True:
                 if i == top:
                     f["data"].resize((f["data"].shape[0] + remain), axis=0)
-                    f["data"][i:,...] = self.X[X_val][i:,...]
+                    f["data"][i:,...] = X_val_noise[i:,...]
 
                     f["labels"].resize((f["labels"].shape[0] + remain), axis=0)
-                    f["labels"][i:,...] = self.y[y_val][i:,...]
+                    f["labels"][i:,...] = y_val_noise[i:,...]
                     break
                 else:
                     f["data"].resize((f["data"].shape[0] + c), axis=0)
-                    f["data"][i:i+c,...] = self.X[X_val][i:i+c,...]
+                    f["data"][i:i+c,...] = X_val_noise[i:i+c,...]
 
                     f["labels"].resize((f["labels"].shape[0] + c), axis=0)
-                    f["labels"][i:i+c,...] = self.y[y_val][i:i+c,...]
+                    f["labels"][i:i+c,...] = y_val_noise[i:i+c,...]
                 i += c
                 print(f["data"].shape)
