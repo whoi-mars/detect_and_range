@@ -337,7 +337,6 @@ class DataHandler():
 
             # l2norm if requsted
             if self.l2norm:
-                print("beep")
                 self.p_t_noise = self.__l2norm(self.p_t_noise)
 
             # make first index of data and labels the example index
