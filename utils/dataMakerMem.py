@@ -395,7 +395,7 @@ class DataHandler():
             # save validation split
             with h5py.File(config.val_data, 'a') as f:
                 if c == 0:
-                    f.create_dataset("data", data=np.concatenate((self.p_t_noise[X_val], self.__load_sampled_noise(len(self.p_t_noise[X_val]))),axis=0), chunks=sig_chunks, maxshape=sig_maxshape)
+                    f.create_dataset("data", data=np.concatenate((self.p_t_noise[X_val], self.__load_sampled_noise(len(X_val))),axis=0), chunks=sig_chunks, maxshape=sig_maxshape)
                     noise_labels_val = -1*np.ones(self.labels[y_val].shape)
                     noise_labels_val[:,4] = 0 
                     f.create_dataset("labels", data=np.concatenate((self.labels[y_val], noise_labels_val), axis=0), chunks=lab_chunks, maxshape=lab_maxshape)
