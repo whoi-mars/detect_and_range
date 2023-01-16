@@ -65,7 +65,7 @@ args = parser.parse_args()
 if args.no_wandb:
     wandb.login()
     wandb.init(
-        project="tcn-test",
+        project="tcn-ccb",
         config={
             "epochs": args.end_epoch - args.start_epoch + 1,
             "batch_size": args.batch_size,
@@ -106,10 +106,10 @@ n_steps_per_epoch = math.ceil(len(dl['train'].dataset) / args.batch_size)
 # Create TCN model
 channel_sizes = [args.nhid] * args.levels
 n_outputs = 2
-input_channels = dl['train'].dataset.imsize[0]
+input_channels = dl['train'].dataset.datasets[0].imsize[0]
 
 # Print size of input
-print(f"Spectrogram size: {dl['train'].dataset.imsize}")
+print(f"Spectrogram size: {dl['train'].dataset.datasets[0].imsize}")
 
 # Initialize model
 model = BranchedTCN_CE(input_size=input_channels, output_size=n_outputs, num_channels=channel_sizes, kernel_size=args.ksize, dropout=args.dropout).to(device)
@@ -283,14 +283,14 @@ def train(model, dataloaders, criterion, optimizer, num_epochs, max_range, save_
                     if phase == 'train':
                         loss.backward()
                         optimizer.step()
-                
+
                 # Update running statistics -- sq_error only accumulated for examples identified with calls
                 running_loss += loss.item() * inputs.size(0)
                 running_c_loss += c_loss.item() * inputs.size(0)
                 running_r_loss += r_loss.item() * inputs.size(0)
                 running_sq_error += ((max_range*r_labels[torch.where((torch.nn.functional.softmax(outputs[:,1:],dim=1)[:,1].squeeze() >= 0.5) & (c_labels.squeeze() == 1))].squeeze() - max_range*outputs[torch.where((torch.nn.functional.softmax(outputs[:,1:],dim=1)[:,1].squeeze() >= 0.5) & (c_labels.squeeze() == 1))[0],0].squeeze()) ** 2).sum().item()      
                 running_corrects += torch.sum((torch.nn.functional.softmax(outputs[:,1:],dim=1)[:,1].squeeze() >= 0.5) == c_labels.squeeze())
-                running_call_count += torch.sum(c_labels.squeeze())
+                running_call_count += ((c_labels.squeeze() + (torch.nn.functional.softmax(outputs[:,1:],dim=1)[:,1].squeeze() >= 0.5)) == 2.0).sum()
 
                 # Step-dependent wandb updates during training
                 if args.no_wandb:
