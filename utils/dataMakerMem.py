@@ -218,7 +218,7 @@ class DataHandler():
         with h5py.File(config.sample_noise, "w") as f:
             dset = f.create_dataset("data", data=samp_noise.T, chunks=(1,len(samp_noise[:,0])))
 
-    def __l2norm(self, x):
+    def __l2norm(self, x, axis=0):
 
         """
         Mean-centers and L2 normalizes the time-domain signals.
@@ -232,8 +232,8 @@ class DataHandler():
         array-like, mean-centered calls (samples/call, num_calls)
         """
 
-        x = x - x.mean(axis=0)
-        return x / np.sqrt(np.sum(x ** 2, axis=0))
+        x = x - x.mean(axis=axis, keepdims=True)
+        return x / np.sqrt(np.sum(x ** 2, axis=axis, keepdims=True))
 
     def __get_dataset_size(self):
         
@@ -350,7 +350,7 @@ class DataHandler():
                 test_size_new = round(test_size / (1.0 - val_size), 5)
                 train_size_new = round(1.0 - test_size_new, 5)
                 X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=test_size_new, train_size=train_size_new, shuffle=True)
-            
+
             # get maxshapes and chink sizes for data and labels
             if c == 0:
                 sig_maxshape = (None, self.p_t_noise.shape[1])
@@ -377,14 +377,28 @@ class DataHandler():
             if test_size > 0:
                 with h5py.File(config.test_data, 'a') as f:
                     if c == 0:
-                        f.create_dataset("data", data=np.concatenate((self.p_t_noise[X_test], self.__load_sampled_noise(len(X_test))), axis=0), chunks=sig_chunks, maxshape=sig_maxshape)
+                        noise_test = self.__load_sampled_noise(len(X_test))
+                        if self.l2norm:
+                            noise_test = self.__l2norm(noise_test, axis=1)
+                        if rand_shift:
+                            for sig in range(len(noise_test)):
+                                noise_test[sig,:] = self.__wrap_signal_random(noise_test[sig,:])
+
+                        f.create_dataset("data", data=np.concatenate((self.p_t_noise[X_test], noise_test), axis=0), chunks=sig_chunks, maxshape=sig_maxshape)
                         noise_labels_test = -1*np.ones(self.labels[y_test].shape)
                         noise_labels_test[:,4] = 0 
                         f.create_dataset("labels", data=np.concatenate((self.labels[y_test], noise_labels_test), axis=0), chunks=lab_chunks, maxshape=lab_maxshape)
                         test_count = 2*len(X_test)
                     else:
+                        noise_test = self.__load_sampled_noise(len(X_test))
+                        if self.l2norm:
+                            noise_test = self.__l2norm(noise_test, axis=1)
+                        if rand_shift:
+                            for sig in range(len(noise_test)):
+                                noise_test[sig,:] = self.__wrap_signal_random(noise_test[sig,:])
+
                         f["data"].resize((f["data"].shape[0] + 2*len(X_test)), axis=0)
-                        f["data"][test_count:,...] = np.concatenate((self.p_t_noise[X_test], self.__load_sampled_noise(len(X_test))), axis=0)
+                        f["data"][test_count:,...] = np.concatenate((self.p_t_noise[X_test], noise_test), axis=0)
                     
                         f["labels"].resize((f["labels"].shape[0] + 2*len(X_test)), axis=0)
                         noise_labels_test = -1*np.ones(self.labels[y_test].shape)
@@ -395,14 +409,28 @@ class DataHandler():
             # save validation split
             with h5py.File(config.val_data, 'a') as f:
                 if c == 0:
-                    f.create_dataset("data", data=np.concatenate((self.p_t_noise[X_val], self.__load_sampled_noise(len(X_val))),axis=0), chunks=sig_chunks, maxshape=sig_maxshape)
+                    noise_val = self.__load_sampled_noise(len(X_test))
+                    if self.l2norm:
+                        noise_val = self.__l2norm(noise_val, axis=1)
+                    if rand_shift:
+                        for sig in range(len(noise_val)):
+                            noise_val[sig,:] = self.__wrap_signal_random(noise_val[sig,:])
+
+                    f.create_dataset("data", data=np.concatenate((self.p_t_noise[X_val], noise_val),axis=0), chunks=sig_chunks, maxshape=sig_maxshape)
                     noise_labels_val = -1*np.ones(self.labels[y_val].shape)
                     noise_labels_val[:,4] = 0 
                     f.create_dataset("labels", data=np.concatenate((self.labels[y_val], noise_labels_val), axis=0), chunks=lab_chunks, maxshape=lab_maxshape)
                     val_count = 2*len(X_val)
                 else:
+                    noise_val = self.__load_sampled_noise(len(X_val))
+                    if self.l2norm:
+                        noise_val = self.__l2norm(noise_val, axis=1)
+                    if rand_shift:
+                        for sig in range(len(noise_val)):
+                            noise_val[sig,:] = self.__wrap_signal_random(noise_val[sig,:])
+
                     f["data"].resize((f["data"].shape[0] + 2*len(X_val)), axis=0)
-                    f["data"][val_count:,...] = np.concatenate((self.p_t_noise[X_val], self.__load_sampled_noise(len(self.p_t_noise[X_val]))), axis=0)
+                    f["data"][val_count:,...] = np.concatenate((self.p_t_noise[X_val], noise_val), axis=0)
                     
                     f["labels"].resize((f["labels"].shape[0] + 2*len(X_val)), axis=0)
                     noise_labels_val = -1*np.ones(self.labels[y_val].shape)
