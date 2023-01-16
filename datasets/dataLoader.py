@@ -1,4 +1,6 @@
 import os
+import math
+import sys
 
 import torch
 import torchvision
@@ -12,6 +14,80 @@ import warnings
 
 from utils.data_augmentation import FrequencyBandZeroing, Normalize1DChannel
 import config
+
+class Noise(data.Dataset):
+
+    def __init__(self, dir_path, transform=None, squeeze=False, from_time=True, hpf=False):
+        super(Noise, self).__init__()
+
+        self.dir_path = dir_path
+        self.transform = transform
+        self.squeeze = squeeze
+        self.inputs, self.imsize = self._load_h5_file_with_data()
+
+        self.inputs['data'] = self.inputs['data'] - self.inputs['data'].mean(axis=1, keepdims=True)
+        self.inputs['data'] = self.inputs['data'] / np.sqrt(np.sum(self.inputs['data'] ** 2, axis=1, keepdims=True))
+
+        if from_time:
+            self.imsize = to_spect([self.inputs['data'][0]]).shape[2:]
+        
+        self.from_time = from_time
+        
+        self.hpf = hpf
+        if hpf:
+            self.sos = butter(config.order, config.fc, 'highpass', fs=config.fs, output='sos')
+    
+    def __getitem__(self, index):
+        inputs = self.inputs['data'][[index]]
+        inputs = self.__wrap_signal_random(inputs)
+        if self.hpf:
+            inputs = self._hpf(inputs)
+        if self.from_time:
+            inputs = to_spect(inputs).squeeze(axis=1).copy()
+
+        inputs = self._from_numpy(inputs)
+        if self.transform is not None:
+            inputs = self.transform(inputs)
+        if self.squeeze:
+            inputs = inputs.squeeze()
+
+        # Preprocess labels
+        class_targets = self._from_numpy(np.asarray([0.0]))
+        range_targets = self._from_numpy(np.asarray([-1.0]))
+
+        return inputs, range_targets, class_targets
+
+    def __wrap_signal_random(self, x, t_min=None, t_max=None):
+
+        # Calculate minimum and maximum shifts without catching
+        # the call between the end and the beinning of the window
+        min_shift = 0
+
+        if t_min is None or t_max is None:
+            max_shift = x.shape[1]
+        else:
+            max_shift = np.floor((self.T - (t_min - t_max)))*self.fs
+
+        # Calculate the random shift amount and shift
+        if max_shift == min_shift:
+            rand_shift = 0
+        else:
+            rand_shift = np.random.randint(min_shift, max_shift)
+        shifted_sig = np.roll(x, rand_shift, 1)
+        return shifted_sig
+    
+    def __len__(self):
+        return self.inputs['data'].shape[0]
+
+    def _from_numpy(self, tensor):
+        return torch.from_numpy(tensor).float()
+
+    def _load_h5_file_with_data(self):
+        file = h5py.File(self.dir_path)
+        return dict(data=file['data'][:]), file['data'].shape[2:]
+
+    def _hpf(self, tensor):
+        return sosfilt(self.sos, tensor)
 
 class Gunshot(data.Dataset):
 
@@ -57,7 +133,6 @@ class Gunshot(data.Dataset):
             self.sos = butter(config.order, config.fc, 'highpass', fs=config.fs, output='sos')
 
     def __getitem__(self, index):
-        
         # Preprocess data
         inputs = self.inputs['data'][[index]]
         if self.hpf:
@@ -170,6 +245,38 @@ class Warped(data.Dataset):
     def _hpf(self, tensor):
         return sosfilt(self.sos, tensor)
 
+class CustomConcatDataset(data.ConcatDataset):
+    def __init__(self, datasets):
+        super(CustomConcatDataset, self).__init__(datasets)
+
+    def __len__(self):
+        return self.cumulative_sizes[0]*2
+
+def chunk(indices, size):
+    return torch.split(torch.tensor(indices), size)
+
+class MixedBatchSampler(data.Sampler):
+    def __init__(self, call_indices, noise_indices, batch_size, call_source, drop_last=False, shuffle=False):
+        self.call_indices = call_indices
+        self.noise_indices = noise_indices
+        self.batch_size = batch_size
+        self.batches_len = 2*len(call_source) // self.batch_size if drop_last else math.ceil(2*len(call_source) / self.batch_size)
+        self.shuffle = shuffle
+
+    def __iter__(self):
+        upsampled_noise_indices = (self.noise_indices*math.ceil(len(self.call_indices)/len(self.noise_indices)))[:len(self.call_indices)]
+        all_inds = np.concatenate((self.call_indices, upsampled_noise_indices))
+
+        if self.shuffle:
+            np.random.shuffle(all_inds)
+        
+        all_batches = list(chunk(all_inds, self.batch_size))
+        all_batches = [batch.tolist() for batch in all_batches]
+        return iter(all_batches)
+    
+    def __len__(self):
+        return self.batches_len
+
 def to_spect(x):
 
     """
@@ -256,10 +363,34 @@ def get_dataloaders(data_dir, batch_size, max_range, shuffle=True, transform=Non
         }
 
         # Create dataset
-        datasets = {x: Gunshot(dir_path=os.path.join(config.data_dir, name_base+'{}.h5'.format(x)), max_range=config.max_range, transform=data_transforms[x], squeeze=squeeze, hpf=hpf) for x in data_transforms.keys()}
+        # datasets = {x: Gunshot(dir_path=os.path.join(config.data_dir, name_base+'{}.h5'.format(x)), max_range=config.max_range, transform=data_transforms[x], squeeze=squeeze, hpf=hpf) for x in data_transforms.keys()}
+
+        datasets = dict()
+        for x in data_transforms.keys():
+            if x == 'train':
+                dataset_g = Gunshot(dir_path=os.path.join(config.data_dir, name_base+'{}.h5'.format(x)), max_range=config.max_range, transform=data_transforms[x], squeeze=squeeze, hpf=hpf)
+                dataset_n = Noise(dir_path=os.path.join(config.data_dir, config.sample_noise), transform=data_transforms[x], squeeze=squeeze, hpf=hpf)
+
+                datasets[x] = CustomConcatDataset((dataset_g, dataset_n))
+            else:
+                datasets[x] = Gunshot(dir_path=os.path.join(config.data_dir, name_base+'{}.h5'.format(x)), max_range=config.max_range, transform=data_transforms[x], squeeze=squeeze, hpf=hpf)
 
         # Make dataloaders
-        dataloaders = {x: data.DataLoader(datasets[x], batch_size=batch_size, shuffle=False if x != 'train' else shuffle, num_workers=32) for x in data_transforms.keys()}
+        # dataloaders = {x: data.DataLoader(datasets[x], batch_size=batch_size, shuffle=False if x != 'train' else shuffle, num_workers=32) for x in data_transforms.keys()}
+
+        dataloaders = dict()
+        for x in data_transforms.keys():
+            if x == 'train':
+                g_len = dataset_g.__len__()
+                gn_len = g_len + dataset_n.__len__()
+                g_indices = list(range(g_len))
+                n_indices = list(range(g_len, gn_len))
+
+                dataloaders[x] = data.DataLoader(datasets[x], 
+                                                 num_workers=32,
+                                                 batch_sampler=MixedBatchSampler(g_indices, n_indices, batch_size=batch_size, call_source=dataset_g, shuffle=shuffle))
+            else:
+                dataloaders[x] = data.DataLoader(datasets[x], batch_size=batch_size, shuffle=False, num_workers=32)
 
         return dataloaders
     else:
