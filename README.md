@@ -191,3 +191,17 @@ See `requirements.txt` for the complete list of dependencies.
 
 ---
 
+## Citation
+
+If you use this repository in your research, please cite the following.
+
+@article{goldwater2023,
+    author = {Goldwater, Mark and Zitterbart, Daniel P. and Wright, Dana and Bonnel, Julien},
+    title = {Machine-learning-based simultaneous detection and ranging of impulsive baleen whale vocalizations using a single hydrophone},
+    journal = {The Journal of the Acoustical Society of America},
+    volume = {153},
+    number = {2},
+    pages = {1094-1107},
+    year = {2023},
+    month = {02},
+}
