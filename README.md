@@ -195,6 +195,7 @@ See `requirements.txt` for the complete list of dependencies.
 
 If you use this repository in your research, please cite the following.
 
+```bibtex
 @article{goldwater2023,
     author = {Goldwater, Mark and Zitterbart, Daniel P. and Wright, Dana and Bonnel, Julien},
     title = {Machine-learning-based simultaneous detection and ranging of impulsive baleen whale vocalizations using a single hydrophone},
@@ -205,3 +206,4 @@ If you use this repository in your research, please cite the following.
     year = {2023},
     month = {02},
 }
+```
