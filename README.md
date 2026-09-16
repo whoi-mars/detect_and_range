@@ -1,6 +1,6 @@
-# Detect and Range
+# Machine-Learning-Based Detection and Ranging of Baleen Whales using a Single Hydrophone
 
-Detect and Range is a PyTorch package for developing deep learning models that detect underwater acoustic signals and estimate source range from passive acoustic recordings.
+A PyTorch package for developing deep learning models that detect underwater acoustic signals and estimate source range from passive acoustic recordings.
 
 The repository was developed for research in passive acoustic monitoring and underwater acoustics, with an emphasis on training Temporal Convolutional Networks (TCNs) using synthetic data generated with the KRAKEN acoustic propagation model and evaluating their performance on experimental recordings.
 
